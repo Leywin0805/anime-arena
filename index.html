@@ -317,8 +317,8 @@ function makeFighter(id, x, y, team){
   const d = ROSTER[id];
   return {id, x, y, r: SPR3D[id] ? 13 : 18, hp:100, max:100, spd:d.spd, team,
           dashT:0, dashCd:0, atkCd:0, inv:0, vx:0, vy:0, aim:0,
-          ult:0, shield:0, kx:0, ky:0, cd:{q:0,w:0,e:0},
-          stun:0, slowT:0, infT:0, last:null, charge:0, root:0, ch:{},
+          ult:0, shield:0, kx:0, ky:0, cd:id==='zenitsu' ? {q:ZQ_CD,w:0,e:0} : {q:0,w:0,e:0},
+          stun:0, slowT:0, infT:0, last:null, charge:0, root:0, ch:id==='zenitsu' ? {q:0} : {},
           vulnT:0, drT:0, howT:-1, fly:null, empT:0,
           lunge:null, hino:false, hinoWin:0, wpT:0, wpN:0, threadN:0, threadT:0, threadReady:false, kuCd:0};
 }
@@ -1320,6 +1320,7 @@ function melee(f){                               // basic attack: short-range sw
     if (second && f.aaHit1) kb = mg ? 600 : 440;                 // Midoriya: landing both autos knocks them back
     if (cleave) kb = 250;
     let ad = (f.id==='midoriya' ? MIDO_AUTO : AUTO_DMG) + (cleave ? CLEAVE_BONUS : 0);
+    if (f.id==='tanjiro') ad *= 0.9;                  // Tanjiro autos: -10%
     const thr = f.id==='tanjiro' && f.threadReady;    // Tanjiro: Opening Thread auto
     if (thr){ ad *= THREAD_MULT; f.threadReady = false; }
     hit(tg, ad, f, Math.cos(f.aim)*kb, Math.sin(f.aim)*kb);
@@ -1391,8 +1392,8 @@ const foe = f => f.team==='p' ? enemy : player;
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 85;                              // Sukuna W teleport distance
-const BLAST_HALF = 90*Math.PI/180, BLAST_REACH = 20;   // Bakugo empowered auto: 90 degree cone, +20 reach
-const SEG = 16, CLEAVE_HALF = 90*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 20;   // empowered Cleave auto: 120 degree cone   // Cleave arc = 110 degrees total
+const BLAST_HALF = 75*Math.PI/180, BLAST_REACH = 50;   // Bakugo empowered auto: 90 degree cone, +20 reach
+const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 20;   // empowered Cleave auto: 200 degree cone
 function segIdx(z, x, y){ let a = Math.atan2(y-z.y, x-z.x); if (a<0) a += Math.PI*2; return Math.floor(a/(Math.PI*2)*SEG) % SEG; }
 function hitWall(z, x, y, dmg){
   const i = segIdx(z, x, y);
@@ -1413,16 +1414,16 @@ function wallHit(f, a, len, dmg){                  // a ray from a trapped fight
 }
 // ---------- ZENITSU NUMBERS ----------
 const ZEN_PARA = 0.2;                                                     // passive: every hit paralyzes 0.2s (doesn't add on top of a longer stun)
-const ZQ_MIN = 200, ZQ_MAX = 420, ZQ_SPD = 1400, ZQ_DMG0 = 4, ZQ_DMG1 = 9, ZQ_CD = 3.5;   // Thunderclap: hold 0-1s -> 200-420px, 4-9 dmg
-const ZW_MULT = 3, ZW_STUN = 1;                                          // Godspeed Q: triple dmg, 1.5s stun, 2 charges
-const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 4, ZE_STUN = 0.8;   // Sixfold triangle
+const ZQ_MIN = 140, ZQ_MAX = 300, ZQ_SPD = 1400, ZQ_DMG0 = 2, ZQ_DMG1 = 5, ZQ_CD = 1.7, ZQ_CD_SLEEP = 1.2, ZQ_MAXCH = 5;   // Thunderclap: 5 charges, one back every ZQ_CD s (ZQ_CD_SLEEP asleep); W costs 2, E costs 3   // Thunderclap: hold 0-1s -> 200-420px, 4-9 dmg
+const ZW_MULT = 3, ZW_STUN = 1, ZW_DMG = 28, ZW_LEN = 420, ZW_COST = 2, ZE_COST = 3;                                          // Godspeed Q: triple dmg, 1.5s stun, 2 charges
+const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 7, ZE_STUN = 0.8;   // Sixfold triangle
 const ZR_LEN = 600, ZR_SPD = 1800, ZR_DMG = 20, ZR_STUN = 0.6, ZR_PAST = 150;   // ult stops 150px past the first enemy hit (so E can follow)             // Flaming Thunder God
 // ---------- TANJIRO NUMBERS ----------
 const KU_T = 1.0, THREAD_T = 3, THREAD_MULT = 1.5, THREAD_STUN = 0.3;          // knock-up length; Opening Thread
-const WW_FLIP = 110, WW_FLIP_T = 0.3, WW_R = 75, WW_HALF = 60*Math.PI/180, WW_DMG = 6;   // Waterwheel
-const WP_T = 2, WP_DMG = 2.5, WP_BLOCK = 0.4, WP_SPD = 1.5;                    // Whirlpool
-const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 7, FLUX_LOCK = 320;   // Constant Flux
-const HINO_WIN = 3, HINO_DMG = 1.25, HINO_KU_CD = 4, HINO_SPD = 1.15;          // Hinokami Kagura
+const WW_FLIP = 110, WW_FLIP_T = 0.3, WW_R = 75, WW_HALF = 60*Math.PI/180, WW_DMG = 5.5;   // Waterwheel
+const WP_T = 2, WP_DMG = 2.3, WP_BLOCK = 0.4, WP_SPD = 1.5;                    // Whirlpool
+const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 6.3, FLUX_LOCK = 320;   // Constant Flux
+const HINO_WIN = 3, HINO_DMG = 1.2, HINO_KU_CD = 4, HINO_SPD = 1.15;          // Hinokami Kagura
 const SKILLS = {
   gojo: {
     // Q: orb flies ahead, becomes a black hole (outer ring slows, core damage ramps with time inside)
@@ -1569,16 +1570,16 @@ const SKILLS = {
   zenitsu: {
     // Q: Thunderclap and Flash. Hold to charge (up to 1s), release: fast dash through enemies. 3 charges. -40% dmg taken while dashing,
     //    a stun stops it. After: slowed 20% for 2s (resets, never stacks)
-    q:{name:'Thunderclap and Flash', label:f => f.zBig ? 'GODSPEED' : 'Thunderclap', cd:ZQ_CD, est:ZQ_DMG1, charges:3, chan:0, cast(f,a){
+    q:{name:'Thunderclap and Flash', label:f => f.zBig ? 'GODSPEED' : 'Thunderclap', cd:ZQ_CD, est:ZQ_DMG1, charges:ZQ_MAXCH, chan:0, cast(f,a){
       const k = f.zK != null ? f.zK : 1; f.zK = null; const big = !!f.zBig;
       if (big){ f.zBig = false; f.ch.q = Math.max(0, (f.ch.q||0) - 1); }   // Godspeed Q uses 2 charges
       zenDash(f, a, k, big, false);
     }},
     // W: Godspeed. Needs 2+ Q charges. Next Q: 2 charges, triple dmg, 1.5s stun, can't be stopped. After: slowed 30% for 2s
-    w:{name:'Godspeed', cd:10, est:ZQ_DMG1*ZW_MULT, chan:0, cast(f,a){ f.ch.q = Math.max(0, (f.ch.q||0) - 2); if (f.cd.q<=0) f.cd.q = skCd(f,'q'); zenDash(f, a, 1, true, false); }},   // instant max dash, uses 2 Q charges
+    w:{name:'Godspeed', cd:0, est:ZW_DMG, cost:ZW_COST, chan:0, cast(f,a){ f.root = 0; f.ch.q = Math.max(0, (f.ch.q||0) - ZW_COST); if (f.cd.q<=0) f.cd.q = skCd(f,'q'); zenDash(f, a, 1, true, false); }},   // instant max dash, uses 2 Q charges
     // E: Sixfold. Giant triangle in front (corner on him): 6 slashes run clockwise along its edges over 1s.
     //    On an edge: hit by the slashes. Inside, away from the edges: 0.8s stun at the end. He can't move while casting
-    e:{name:'Rokuren', label:f => f.e2>0 ? 'PART 2' : 'Rokuren', cd:10, est:ZE_EDGE*2, chan:0, cast(f,a){ sixfold(f, a, 1); }},   // part 2 handled in castSkill
+    e:{name:'Rokuren', label:f => f.e2>0 ? 'PART 2' : 'Rokuren', cd:0, est:ZE_EDGE*2, cost:ZE_COST, chan:0, cast(f,a){ sixfold(f, a, 1); }},   // part 2 handled in castSkill
     // R: Flaming Thunder God. Huge dragon dash: big damage, burn, brief stun on the first enemy hit. Can't be stopped
     r:{name:'Flaming Thunder God', hud:'Thunder God', chan:0.3, cast(f,a){ zenDash(f, a, 1, false, true); }}
   },
@@ -1753,11 +1754,11 @@ function vaultDist(f, a, range){                   // Tanjiro's flip: goes over 
   return 0;
 }
 function zenDash(f, a, k, big, ult){               // Zenitsu's dashes: pass through, hit once on the way
-  const len = ult ? ZR_LEN : ZQ_MIN + (ZQ_MAX-ZQ_MIN)*k, go = dashClip(f, a, len, ult || big || k >= 0.99, ZQ_DMG0 + (ZQ_DMG1-ZQ_DMG0)*k), dur = Math.max(0.05, go/(ult ? ZR_SPD : ZQ_SPD));
+  const len = ult ? ZR_LEN : big ? ZW_LEN : ZQ_MIN + (ZQ_MAX-ZQ_MIN)*k, go = dashClip(f, a, len, ult || big || k >= 0.99, ZQ_DMG0 + (ZQ_DMG1-ZQ_DMG0)*k), dur = Math.max(0.05, go/(ult ? ZR_SPD : ZQ_SPD));
   const tg = foe(f), sx = f.x, sy = f.y, ex = f.x + Math.cos(a)*go, ey = f.y + Math.sin(a)*go;
   f.drT = Math.max(f.drT||0, dur + 0.05);          // -40% damage taken during the dash
   let px = sx, py = sy, done = false;
-  const after = () => { if (!ult){ f.zSlowT = 2; f.zSlowK = big ? 0.7 : 0.8; } };   // self-slow: 20% (Godspeed 30%), resets
+  const after = () => { if (!ult){ f.zSlowT = big ? 2 : 1; f.zSlowK = big ? 0.7 : 0.9; } };   // self-slow: 20% (Godspeed 30%), resets
   f.lunge = {sx, sy, tx:ex, ty:ey, t:0, dur, zk: ult ? 'r' : big ? 'w' : 'q', ghost:true, brk: !(big || ult), after, end: after, tick(){
     if (!done && tg.hp>0 && segDist(tg.x, tg.y, [px, py], [f.x, f.y]) < f.r + tg.r){
       done = true;
@@ -1765,7 +1766,7 @@ function zenDash(f, a, k, big, ult){               // Zenitsu's dashes: pass thr
         const L = f.lunge, left = Math.hypot(L.tx-f.x, L.ty-f.y);   // stop shortly past them
         if (L && left > ZR_PAST){ const ux = (L.tx-L.sx)/(Math.hypot(L.tx-L.sx, L.ty-L.sy)||1), uy = (L.ty-L.sy)/(Math.hypot(L.tx-L.sx, L.ty-L.sy)||1);
           L.sx = f.x; L.sy = f.y; L.tx = f.x + ux*ZR_PAST; L.ty = f.y + uy*ZR_PAST; L.t = 0; L.dur = ZR_PAST/ZR_SPD; } }
-      else { hit(tg, (ZQ_DMG0 + (ZQ_DMG1-ZQ_DMG0)*k) * (big ? ZW_MULT : 1), f); ZN.hitAt(tg, big ? 'hit_zap_big' : 'hit_zap', big ? 1.6 : 1.8);
+      else { hit(tg, big ? ZW_DMG : ZQ_DMG0 + (ZQ_DMG1-ZQ_DMG0)*k, f); ZN.hitAt(tg, big ? 'hit_zap_big' : 'hit_zap', big ? 1.6 : 1.8);
         if (big && tg.inv<=0){ tg.stun = Math.max(tg.stun, ZW_STUN); ZN.mark(tg); fx.push({x:tg.x, y:tg.y-tg.r-14, t:0.7, txt:'STUNNED'}); } }
     }
     px = f.x; py = f.y;
@@ -1794,6 +1795,7 @@ function growSix(z, dt){
 function updateZenitsu(f, dt){
   if (!f.asleep && f.hp > 0 && f.hp <= f.max*0.5){ f.asleep = true; fx.push({x:f.x, y:f.y-f.r-16, t:0.9, txt:'ASLEEP'}); }   // 50% HP: asleep for good
   if (f.zSlowT>0) f.zSlowT -= dt;
+  if (f.fleeCd>0) f.fleeCd -= dt;
   if (f.zChain>0) f.zChain -= dt;
   if (f.e2>0){ f.e2 -= dt; if (f.e2<=0) f.cd.e = SKILLS.zenitsu.e.cd; }   // missed part 2: cooldown starts
   if (f.zHold>0){ if (f.stun>0 || f.silT>0 || f.chan) f.zHold = 0; else f.zHold = Math.min(1, f.zHold + dt); }   // Q charging
@@ -1949,10 +1951,11 @@ function castSkill(f, key, ang){
     f.commitT = Math.max(f.commitT||0, 0.3);
     return true;
   }
-  if (f.id==='zenitsu' && key==='w' && (chg(f,'q') < 2 || f.lunge)) return false;   // Godspeed needs 2 Q charges
+  if (f.id==='zenitsu' && key==='w' && (chg(f,'q') < ZW_COST || f.lunge)) return false;   // Godspeed needs 2 Q charges
   if (f.id==='zenitsu' && key==='e'){               // Sixfold: part 2 (counterclockwise) within 2s, then the full cooldown
     if (f.e2>0){ if (f.root>0) return false; f.e2 = 0; f.cd.e = sk.cd; f.wpT = 0; sixfold(f, ang, -1); f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true; }
-    if (f.cd.e>0) return false;
+    if (f.cd.e>0 || chg(f,'q') < ZE_COST) return false;
+    f.ch.q -= ZE_COST; if (f.cd.q<=0) f.cd.q = skCd(f,'q');
     sixfold(f, ang, 1); f.e2 = ZE_WIN; f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true;
   }
   if (f.id==='tanjiro' && key==='r'){             // Hinokami: on with a full ult; R again ends it early and resets Q/W/E
@@ -2095,11 +2098,11 @@ function botOffense(f, o, dist, ea){
     if (f.zHold>0) return;                                                               // already charging a dash
     const lead = Math.atan2(o.y + o.vy*0.2 - f.y, o.x + o.vx*0.2 - f.x);
     if (f.ult>=100 && dist<520 && (softened(o) || dist<300) && castSkill(f,'r',lead)) return;   // Thunder God
-    const keep = 0;
-    if (chg(f,'q')>=2+keep && dist < ZQ_MAX - 80 && castSkill(f,'w',lead)) return;      // Godspeed: instant max dash through them         // arm Godspeed, then charge the Q
-    if (f.cd.e<=0 && !(f.e2>0) && dist>100 && dist<200 && !(o.stun>0.2) && castSkill(f,'e',ea)) return;   // Sixfold opener: they're in the middle -> instant stun, then Q / Godspeed
-    if (dist<230 && (o.stun>0.4 || (o.slowT||0)>0.3 || o.knockT>0) && castSkill(f,'e',ea)) return;   // Sixfold on a stuck target
-    if (chg(f,'q')>keep && dist>40 && dist<430){ f.zHold = 0.0001; return; }               // start charging Thunderclap
+    const burst = chg(f,'q') >= ZQ_MAXCH, emerg = f.hp < 45 && dist < 210;   // save every charge for E > W > E; spend early only to escape
+    if (burst && !(f.e2>0) && dist>90 && dist<ZE_LEN-40 && castSkill(f,'e',ea)) return;                         // combo opener: Sixfold
+    if (emerg && !(f.e2>0) && chg(f,'q')>=ZE_COST && castSkill(f,'e',ea)) return;                               // escape: stun them
+    if (emerg && chg(f,'q')>=ZW_COST && dist<ZW_LEN-80 && castSkill(f,'w',lead)) return;                        // escape: Godspeed through them
+    if (!burst && dist<130 && chg(f,'q')>0 && (f.fleeCd||0)<=0){ f.fleeCd = 2.2; f.zK = Math.max(0, Math.min(1, (dist + 140 - ZQ_MIN)/(ZQ_MAX - ZQ_MIN))); if (castSkill(f,'q',ea)){ f.zThru = true; return; } }   // escape: Thunderclap THROUGH them (chip damage), then Space away
     return;
   }
   if (f.id==='tanjiro'){
@@ -2266,7 +2269,7 @@ function meleePhase(f, o, dist, dt){              // Sukuna / Midoriya: dive and
 }
 function styleOf(f, o){                           // ranged vs Zenitsu: stay out of Sixfold range while his E is ready
   const st = styleOf0(f, o);
-  if (o.id==='zenitsu' && (f.id==='gojo' || f.id==='todoroki' || f.id==='midoriya') && (o.cd.e<=0 || o.e2>0) && !(o.stun>0) && st.range > 60) return {range: Math.max(st.range, 290), strafe: st.strafe};
+  if (o.id==='zenitsu' && (f.id==='gojo' || f.id==='todoroki' || f.id==='midoriya') && (chg(o,'q')>=ZE_COST || o.e2>0) && !(o.stun>0) && st.range > 60) return {range: Math.max(st.range, 290), strafe: st.strafe};
   return st;
 }
 function styleOf0(f, o){                            // Bakugo: keeps distance unless bursting
@@ -2347,17 +2350,19 @@ function runAI(f, o, dt){
   }
   if (f.id==='zenitsu' && f.stun<=0 && f.root<=0 && !f.lunge && !(f.zHold>0) && o.stun>0.35 && f.ult>=100 && dist < ZR_LEN - 200 && castSkill(f, 'r', ea)) return;   // stunned: ult through them to chain it
   if (f.id==='zenitsu' && f.stun<=0 && f.root<=0 && !f.lunge && !(f.zHold>0) && o.stun>0.2 && f.R){   // they're stunned: cash in with a dash
-    if (chg(f,'q')>=2 && f.cd.w<=0 && dist < ZQ_MAX - 60 && castSkill(f, 'w', ea)) return;         // Godspeed: max damage
-    if (chg(f,'q')>0 && dist > 30 && dist < ZQ_MAX - 60){ f.zHold = 0.0001; return; }              // short Thunderclap through them
+    if ((f.e2>0 || chg(f,'q')>=ZQ_MAXCH) && chg(f,'q')>=ZW_COST && dist < ZW_LEN - 60 && castSkill(f, 'w', ea)) return;         // Godspeed: max damage
+    /* Q charges are saved for escaping and the burst combo */
   }
   if (f.id==='zenitsu' && f.e2>0 && f.root<=0 && f.stun<=0 && !f.lunge && !(f.zHold>0)){   // Sixfold part 2: put them on a corner (2 edge slashes)
+    if (f.e2>0.4 && chg(f,'q')>=ZW_COST && o.stun>0 && dist < ZW_LEN - 60 && castSkill(f, 'w', ea)) return;   // E > W > E: Godspeed before part 2
     const CORNER = ZE_LEN - 8;
     if (Math.abs(dist - CORNER) < 14){ if (castSkill(f, 'e', ea + ZE_HALF*(f.strD||1))) return; }
     else if (!(o.stun>0) || f.e2 < 0.25){ if (dist < ZE_LEN - 10 && castSkill(f, 'e', ea)) return; }   // not stunned (or window closing): middle stun
     else if (o.stun>0){ const dir = dist < CORNER ? -1 : 1; f.vx = Math.cos(ea)*f.spd*dir; f.vy = Math.sin(ea)*f.spd*dir; f.aim = ea; return; }   // step to the right distance
   }
   if (f.id==='zenitsu' && f.zThru && !f.lunge){     // just dashed through a diver: Sixfold back at him, then keep running
-    if (f.stun<=0 && f.cd.e<=0 && dist < ZE_LEN - 20) castSkill(f, 'e', ea);
+    if (f.stun<=0 && f.hp<45 && chg(f,'q')>=ZE_COST && dist < ZE_LEN - 20) castSkill(f, 'e', ea);
+    if (f.dashCd<=0 && f.stun<=0){ const away = ea + Math.PI + (Math.random()-0.5)*0.6; f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(away)*620; f.vy = Math.sin(away)*620; }   // then Space dash away
     f.zThru = false;
   }
   if (f.id==='zenitsu' && !(f.zHold>0) && !f.lunge && (o.id==='sukuna' || o.id==='tanjiro') && chg(f,'q')>0 && f.stun<=0 && f.root<=0 && f.R){
@@ -2585,10 +2590,11 @@ function update(dt){
   }
   if (player.dashT>0){ player.dashT -= dt; }
   else { player.vx = dx*player.spd; player.vy = dy*player.spd; }
-  if (player.id==='zenitsu') zenQInput(player); else if (keys[KB.q]) castSkill(player,'q',player.aim);
-  if (keys[KB.w]) castSkill(player,'w',player.aim);
-  if (keys[KB.e]) castSkill(player,'e',player.aim);
-  if (keys[KB.r]) castSkill(player,'r',player.aim);
+  const hl = player.keyHeld || (player.keyHeld = {});   // one cast per key press: holding a key never spends extra charges
+  for (const k of ['q','w','e','r']){
+    if (k==='q' && player.id==='zenitsu'){ zenQInput(player); continue; }
+    if (keys[KB[k]]){ if (!hl[k] && castSkill(player,k,player.aim)) hl[k] = true; } else hl[k] = false;
+  }
   if (player.howT>=0){ if (mouse.down){ mouse.down = false; howLaunch(player, mouse.x, mouse.y); } }
   else if (mouse.down && player.atkCd<=0 && player.hp>0 && !stunned && !player.fly){ doAuto(player); }
   }
@@ -2652,6 +2658,7 @@ function update(dt){
     f.atkCd -= dt; f.dashCd -= dt; f.inv -= dt;
     f.stun -= dt; f.slowT -= dt; f.infT -= dt; f.root -= dt; if (f.redT>0) f.redT -= dt;
     for (const k in f.cd) f.cd[k] -= dt;
+    if (f.id==='zenitsu' && f.asleep && f.cd.q>0) f.cd.q -= dt*(ZQ_CD/ZQ_CD_SLEEP - 1);   // asleep: Thunderclap charges come back faster
     const sks = SKILLS[f.id];
     for (const k in f.ch){                          // charge skills regain one use when their cooldown ends
       const sk = sks && sks[k];
@@ -2983,7 +2990,7 @@ function hud(){
     const cdLeft = (f.cd[kk]||0) > 0.05 ? f.cd[kk] : 0;
     const gearFlash = kk==='r' && f.gearWin>0;
     const lockOn = f.id==='tanjiro' && kk==='e' && fluxLock(f);   // Tanjiro: E is free while the enemy is knocked up
-    const ready = lockOn || (kk==='r' ? (f.ult>=100 || f.howT>=0 || gearFlash) : sk.charges ? charges>0 : staged ? f.qgap<=0 : cdLeft<=0);
+    const ready = lockOn || (kk==='r' ? (f.ult>=100 || f.howT>=0 || gearFlash) : sk.cost ? ((kk==='e' && f.e2>0) || chg(f,'q') >= sk.cost) : sk.charges ? charges>0 : staged ? f.qgap<=0 : cdLeft<=0);
     drawIcon(f, kk, x, y, bw, bh);                     // themed picture for each ability
     if (kk==='r'){                                     // ult meter: bar up the right edge
       const u = Math.min(100, f.ult);
@@ -3001,6 +3008,7 @@ function hud(){
     ctx.textBaseline = 'middle';
     const kn = kbName(KB[kk]); ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = kn.length > 2 ? 'bold 9px monospace' : 'bold 13px monospace'; ctx.fillText(kn, x+5, y+10); const knw = ctx.measureText(kn).width;
     if (kk==='r'){ ctx.font = 'bold 8px monospace'; ctx.fillStyle = gearFlash ? '#b8ff6a' : '#ffd93d'; ctx.fillText(gearFlash ? 'GEAR' : 'ULT', x+9+knw, y+10); }   // what R does right now
+    if (sk.cost){ ctx.save(); ctx.textAlign = 'right'; ctx.font = 'bold 10px monospace'; ctx.fillStyle = ready ? '#ffd93d' : '#889'; ctx.fillText(kk==='e' && f.e2>0 ? 'FREE' : '-'+sk.cost, x+bw-5, y+10); ctx.restore(); }   // charges this costs
     if (sk.charges){                                   // charge pips: filled = ready
       for (let c=0, mc=maxCh(f,kk); c<mc; c++){
         ctx.beginPath(); ctx.arc(x+bw-8-c*(mc>4 ? 7 : 11), y+10, mc>4 ? 3 : 4, 0, 7);
@@ -3217,10 +3225,10 @@ const FX3 = (() => {
                 t: 0, sweepT: o.sweepT || 0.08, hold: o.hold || 0.06, life: o.life || 0.34});
   }
   function melee(f, cleave, combo, emp){
-    if (f.id === 'bakugo'){ const fa = f.aim; effectDir(emp ? 'palm_blast_big' : 'palm_blast', SX(f.x) + Math.cos(fa) * 9, SY(f.y) + Math.sin(fa) * 9 * TILT, 33, 1.7, Math.atan2(Math.sin(fa) * TILT, Math.cos(fa))); return; }
+    if (f.id === 'bakugo'){ const fa = f.aim; effectDir(emp ? 'palm_blast_big' : 'palm_blast', SX(f.x) + Math.cos(fa) * 9, SY(f.y) + Math.sin(fa) * 9 * TILT, 33, emp ? 2.1 : 1.7, Math.atan2(Math.sin(fa) * TILT, Math.cos(fa))); return; }
     if (f.id !== 'sukuna') return;
     const fa = f.aim;
-    if (cleave) smear(f, 'h', fa, 70 * D2R, -70 * D2R, {R: 64, w: 22, h: 30});
+    if (cleave) smear(f, 'h', fa, 100 * D2R, -100 * D2R, {R: 64, w: 22, h: 30});
     else if (combo === 1) smear(f, 'v', fa, 115 * D2R, -60 * D2R, {lean: -0.55});
     else if (combo === 2) smear(f, 'v', fa, 115 * D2R, -60 * D2R, {lean: 0.55});
     else { smear(f, 'h', fa, 5 * D2R, 100 * D2R, {R: 42, w: 12}); smear(f, 'h', fa, -5 * D2R, -100 * D2R, {R: 42, w: 12}); }
@@ -4244,7 +4252,7 @@ const COMBOS = {                                   // suggested combos shown in 
   sukuna: ['Q1 (vulnerable) > Q2 > Q3 (stun) > W dash > Cleave auto', 'E Flames > Space in behind the orbs > W dash > Cleave auto', 'R Shrine > Q1 Q2 Q3 + E inside the walls > W / autos'],
   bakugo: ['E > auto > W > E > auto > Q > E > auto > W (dive)', 'W chip at range > dive when they are slowed', 'R tornado to tank Domain/Purple > click to launch'],
   todoroki: ['Fire bolt > E Fire Vortex (cocoon) > W Hell Spider (+15% fire)', 'Q Ice Wall (stun) > W Hell Spider > bolts', 'Alternate fire / ice: hold -20..20C for 5s = Phosphor', 'R Flashfire Freeze: chill (slow) > ignite (knock-up)'],
-  zenitsu: ['Q Thunderclap: hold to charge, release to dash through', 'W Godspeed (instant max dash, 2 charges, 1.5s stun) > E Sixfold > E part 2', 'E (middle = stun) > R Thunder God through them > E part 2 (stun again)'],
+  zenitsu: ['Q Thunderclap: hold to charge, release to dash through', 'E Sixfold (3 charges) > W Godspeed (2 charges) > E part 2 (free)', 'E (middle = stun) > R Thunder God through them > E part 2 (stun again)'],
   tanjiro: ['Q Waterwheel (knock-up) > E Constant Flux lock-on', 'W Whirlpool into them (knock-up) > E lock-on > autos', 'R Hinokami > Q > E lock-on > auto (knock-up) > E lock-on'],
   midoriya: ['Q Whip (silence) > Q again to zip in > auto auto (knockback)', 'W Smoke > walk in unseen > Q Whip > auto auto', 'Land 3 Air Force (E) > press R in the flash: Gear 2', 'Full ult: R One For All > homing volleys + speed, chase with autos']
 };
@@ -4337,6 +4345,7 @@ function startTraining(i){
   trainIdx = (i + TRAIN_CHARS.length) % TRAIN_CHARS.length;
   startMatch(TRAIN_CHARS[trainIdx], 'dummy');
   training = true; bots = false; trainLog = []; trainTotal = 0; ultRefillAt = 0;
+  if (player.id==='zenitsu') player.ch.q = ZQ_MAXCH;   // tester range: full charges
   enemy.x = W/2 + 160;
 }
 function startMatch(p, e){
@@ -4639,9 +4648,9 @@ const INFO = {
   },
   zenitsu: {
     p: ["PARALYSIS", "Every hit briefly paralyzes. At half health he falls asleep for good, and his speed can no longer be reduced.", "Zenitsu Agatsuma, a Demon Slayer who is terrified awake and deadly asleep."],
-    q: ["Hold to charge, release to dash through enemies. The longer the charge, the harder the hit. You take less damage mid-dash.", "Thunder Breathing, First Form: Thunderclap and Flash. A lightning-fast draw and dash."],
-    w: ["Spend two Thunderclap charges on an instant, unstoppable dash that hits massively hard and stuns.", "Thunderclap and Flash: Godspeed. The same step at a speed the eye cannot follow."],
-    e: ["Slash a giant triangle in front of you. The edges cut, and anyone caught inside is stunned when it closes. Press E again for a second pass.", "Thunderclap and Flash: Sixfold, or Rokuren. Six strikes in a single breath."],
+    q: ["Hold to charge, release to dash through enemies. Perfect for running away. Your charges refill over time, and faster once he falls asleep.", "Thunder Breathing, First Form: Thunderclap and Flash. A lightning-fast draw and dash."],
+    w: ["Spend charges on an instant, unstoppable dash that hits hard and stuns.", "Thunderclap and Flash: Godspeed. The same step at a speed the eye cannot follow."],
+    e: ["Spend charges to slash a giant triangle in front of you. The edges cut, and anyone caught inside is stunned when it closes. Press E again for a free second pass.", "Thunderclap and Flash: Sixfold, or Rokuren. Six strikes in a single breath."],
     r: ["Charge up, then rocket forward as a dragon of lightning. An unstoppable dash that burns and briefly stuns the first enemy hit.", "Thunder Breathing, Seventh Form: Flaming Thunder God. A dragon of lightning, created by Zenitsu himself."]
   }
 };
