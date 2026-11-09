@@ -1276,6 +1276,10 @@ const gearName = g => g>=4 ? 'TOP GEAR' : 'GEAR '+g;                   // Air Fo
 const autoCd = f => f.id==='todoroki' ? TODO_AUTO_CD : MELEE_CD;    // One For All: autos reset in 1s; Todoroki's bolts every 2s
 function doAuto(f){                               // swing + set the auto cooldown
   if (f.chan) return;                              // no autos while channeling
+  if (f.id==='bakugo' && f.empT>0){                // empowered auto locks onto an enemy inside its reach
+    const lt = f.team==='p' ? enemy : player;
+    if (lt && lt.hp>0 && Math.hypot(lt.x-f.x, lt.y-f.y) < MELEE_R + BLAST_REACH + lt.r) f.aim = Math.atan2(lt.y-f.y, lt.x-f.x);
+  }
   auto3(f, f.id==='sukuna' && f.cleaveT>0);
   melee(f);
   if (f.id==='midoriya'){
