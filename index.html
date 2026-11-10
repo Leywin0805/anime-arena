@@ -123,7 +123,7 @@ const ROSTER = {
   sasuke:{name:'Sasuke',color:'#5b4bb5',hp:130,spd:205},
   tanjiro:{name:'Tanjiro',color:'#2e8b57',hp:145,spd:190},
   zenitsu:{name:'Zenitsu',color:'#ffd93d',hp:120,spd:230},
-  jinwoo:{name:'Jin-Woo',color:'#9b5cff',hp:135,spd:195},
+  jinwoo:{name:'Jin-Woo',color:'#9b5cff',hp:95,spd:195},
   eren:{name:'Eren',color:'#8b5a2b',hp:160,spd:175},
   levi:{name:'Levi',color:'#9aa5b1',hp:125,spd:225},
   bakugo:{name:'Bakugo',color:'#f28c28',hp:140,spd:200},
@@ -1594,11 +1594,11 @@ const SKILLS = {
   jinwoo: {
     // Passive Monarch's Domain: aura fills the bar while an enemy is inside; at 20% two soldiers appear for free
     // Q: Ruler's Authority: soldiers dash to his 2 and 10 o'clock and block shots, -20% damage taken for 2s
-    q:{name:"Ruler's Authority", hud:'Authority', cd:12, est:0, chan:0.1, cast(f,a){ JW.q(f); }},
+    q:{name:"Ruler's Authority", hud:'Authority', cd:14, est:0, chan:0.1, cast(f,a){ JW.q(f); }},
     // W: Shadow Exchange: sinks into a shadow pool (untargetable 1.5s); soldiers dissipate, re-summon at him and dash at the enemy
-    w:{name:'Shadow Exchange', hud:'Exchange', cd:10, est:0, chan:0, cast(f,a){ JW.w(f); }},
+    w:{name:'Shadow Exchange', hud:'Exchange', cd:12, est:0, chan:0, cast(f,a){ JW.w(f); }},
     // E: Dagger Rush: 2 charges; a hit marks the enemy for 3s, every soldier dashes at him and keeps attacking
-    e:{name:'Dagger Rush', hud:'Dagger', cd:5, est:3.5, charges:2, chan:0.1, cast(f,a){ JW.dagger(f, a); }},
+    e:{name:'Dagger Rush', hud:'Dagger', cd:5, est:2, charges:2, chan:0.1, cast(f,a){ JW.dagger(f, a); }},
     // R: Arise: full bar. Last ability Q = Iron, W = Igris, E = Beru (default Iron), summoned at 12 o'clock
     r:{name:'Arise', hud:'Arise', chan:0.65, cast(f,a){ JW.r(f); }}
   },
@@ -3980,7 +3980,7 @@ const ZN = (() => {
 // Q Ruler's Authority (soldiers to 2 + 10 o'clock, -20% dmg, block shots) | W Shadow Exchange (sink, untargetable 1.5s, soldiers tp + dash)
 // E Dagger Rush (mark: soldiers dash + chase) | R Arise (Q=Iron, W=Igris, E=Beru at 12 o'clock) ----------
 const JW = (() => {
-  const AURA_R = 230, AURA_FILL = 10, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 150, BAR_T = 2, W_T = 1.5, WDASH = 93;
+  const AURA_R = 170, AURA_FILL = 5, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 150, BAR_T = 2, W_T = 1.5, WDASH = 93;
   const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 12.85, iron: 25.65, igris: 22.35, beru: 12.85}, DODGE_CD = 10, HEAL_W = 0.3;
   const has = typeof document !== 'undefined' && !!document.createElement;
   let T = 0;
@@ -4025,7 +4025,7 @@ const JW = (() => {
     fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: 'SHADOW EXCHANGE'});
   }
   function dagger(f, a){
-    proj(f, a, {spd: 820, r: 7, dmg: 3.5, life: 0.6, line: true, color: '#b48cff', front: f.r + 8, onHit: tg => mark(f, tg)});
+    proj(f, a, {spd: 820, r: 7, dmg: 2, life: 0.6, line: true, color: '#b48cff', front: f.r + 8, onHit: tg => mark(f, tg)});
   }
   function mark(f, tg){
     tg.jwMark = MARK_T; fx.push({x: tg.x, y: tg.y - tg.r - 16, t: 0.8, txt: 'MARKED'});
@@ -4101,7 +4101,7 @@ const JW = (() => {
       f.jwBar = Math.max(0, (f.jwBar || 0) - dt); f.jwW = Math.max(0, (f.jwW || 0) - dt);
       const tg = foe(f);
       if (f.hp > 0){ const inside = tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < AURA_R;           // aura fills the bar; 2s after the enemy leaves it drains at the same rate
-        if (inside || f.jwFeed > 0){ f.jwOut = 0; if (inside && f.ult < 100) f.ult = Math.min(100, f.ult + AURA_FILL * dt); } else { f.jwOut = (f.jwOut || 0) + dt; if (f.jwOut > 2) f.ult = Math.max(0, f.ult - AURA_FILL * dt); }
+        if (inside || f.jwFeed > 0){ f.jwOut = 0; if (inside && f.ult < 100) f.ult = Math.min(100, f.ult + AURA_FILL * dt); } else { f.jwOut = (f.jwOut || 0) + dt; if (f.jwOut > 0) f.ult = Math.max(0, f.ult - AURA_FILL * dt); }
         f.jwFeed = Math.max(0, (f.jwFeed || 0) - dt); }
       if (f.hp > 0 && f.ult >= SUMMON_AT && !f.jwW) for (const slot of [0, 1]){                                                                  // 20%: free soldiers
         if (f.jwLock[slot] > 0 || sol.some(s => s.f === f && s.id === 'shadow' && s.slot === slot && !s.dead)) continue;
@@ -4254,7 +4254,7 @@ const JW = (() => {
   function style(f, o){                      // Jin-Woo wants mid range inside his aura to farm the bar, then backs off and lets the shadows work
     const n = mine(f).length;
     if (f.hp < f.max * 0.45) return {range: 340, strafe: 150};
-    return n >= 2 ? {range: 300, strafe: 140} : {range: 195, strafe: 110};
+    return n >= 2 ? {range: 300, strafe: 140} : {range: 150, strafe: 100};
   }
   function pickArise(o){                      // melee divers get the Igris guard, ranged enemies get Beru; Iron when he is hurt
     const melee = (STYLE[o.id] || {range: 55}).range < 150;
