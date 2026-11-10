@@ -183,7 +183,7 @@ function cast3(f, key, ang, stage, prevLast){       // which animation goes with
     else if (key==='e') play3(f, 'e_infinity', null, {hold:1.5, moveCancel:true});
     else if (key==='r') gojoPurple(f, prevLast) ? play3(f, 'r_purple', ang, {dur:0.62}) : play3(f, 'r_void', ang, {dur:1.1, loopHold:true});
   } else if (f.id==='bakugo'){
-    if (key==='q') play3(f, 'q_grenade', ang, {dur:0.5});
+    if (key==='q') play3(f, 'q_grenade', ang, {dur:0.5, t0:0.15});
     else if (key==='w') play3(f, 'w_ap', ang, {dur:0.4});
     else if (key==='e') play3(f, 'e_blast', ang, {dur:0.5});
     else if (key==='r' && !(f.howT >= 0)) play3(f, 'r_howitzer', null, {dur:2.7, loopHold:true});
@@ -1416,7 +1416,7 @@ const foe = f => { const t = f.team==='p' ? enemy : player; return JW_T && t.id=
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 85;                              // Sukuna W teleport distance
-const BLAST_HALF = 75*Math.PI/180, BLAST_REACH = 50;   // Bakugo empowered auto: 90 degree cone, +20 reach
+const BLAST_HALF = 75*Math.PI/180, BLAST_REACH = 62;   // Bakugo empowered auto: 90 degree cone, +20 reach
 const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 20;   // empowered Cleave auto: 200 degree cone
 function segIdx(z, x, y){ let a = Math.atan2(y-z.y, x-z.x); if (a<0) a += Math.PI*2; return Math.floor(a/(Math.PI*2)*SEG) % SEG; }
 function hitWall(z, x, y, dmg){
@@ -1440,7 +1440,7 @@ function wallHit(f, a, len, dmg){                  // a ray from a trapped fight
 const ZEN_PARA = 0.2;                                                     // passive: every hit paralyzes 0.2s (doesn't add on top of a longer stun)
 const ZQ_MIN = 140, ZQ_MAX = 300, ZQ_SPD = 1400, ZQ_DMG0 = 2, ZQ_DMG1 = 5, ZQ_CD = 1.7, ZQ_CD_SLEEP = 1.2, ZQ_MAXCH = 5;   // Thunderclap: 5 charges, one back every ZQ_CD s (ZQ_CD_SLEEP asleep); W costs 2, E costs 3   // Thunderclap: hold 0-1s -> 200-420px, 4-9 dmg
 const ZW_MULT = 3, ZW_STUN = 1, ZW_DMG = 28, ZW_LEN = 420, ZW_COST = 2, ZE_COST = 3;                                          // Godspeed Q: triple dmg, 1.5s stun, 2 charges
-const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 7, ZE_STUN = 0.8;   // Sixfold triangle
+const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 7, ZE_STUN = 0.5, ZE_LOCK = 2;   // Sixfold triangle
 const ZR_LEN = 600, ZR_SPD = 1800, ZR_DMG = 20, ZR_STUN = 0.6, ZR_PAST = 150;   // ult stops 150px past the first enemy hit (so E can follow)             // Flaming Thunder God
 // ---------- TANJIRO NUMBERS ----------
 const KU_T = 1.0, THREAD_T = 3, THREAD_MULT = 1.5, THREAD_STUN = 0.3;          // knock-up length; Opening Thread
@@ -1564,7 +1564,7 @@ const SKILLS = {
       MD.smoke(zones[zones.length-1]);
     }},
     // E: Air Force. Slow, thick air blast: damage + knockback. 2 charges. 3 hits open a Gear Up window
-    e:{name:'Air Force', cd:3, est:4, charges:1, chan:0, cast(f,a){ airForceE(f, a); }},   // instant; charges by gear: 1 / 2 / 4 / 6 (AF_CHARGES); shot levels up by gear (airForceE)
+    e:{name:'Air Force', cd:3, est:4, charges:1, chan:0, cast(f,a){ airForceE(f, a); }},   // instant; charges by gear: 2 / 3 / 4 / 6 (AF_CHARGES); shot levels up by gear (airForceE)
     // R: Gear Shift / One For All (see castSkill): starts Gear 1. 3 Air Force hits -> Gear 2, 8 total -> Gear 3, 18 total -> Top Gear
     //    5 more -> Top Gear (+20%). Each time R flashes: press it within 1s.
     //    Full ult -> One For All 6s: homing Air Force volley every 2s (1/2/2/3 shots) + dmg & speed +10/10/20/40%
@@ -1614,7 +1614,7 @@ const SKILLS = {
     w:{name:'Godspeed', cd:0, est:ZW_DMG, cost:ZW_COST, chan:0, cast(f,a){ f.root = 0; f.ch.q = Math.max(0, (f.ch.q||0) - ZW_COST); if (f.cd.q<=0) f.cd.q = skCd(f,'q'); zenDash(f, a, 1, true, false); }},   // instant max dash, uses 2 Q charges
     // E: Sixfold. Giant triangle in front (corner on him): 6 slashes run clockwise along its edges over 1s.
     //    On an edge: hit by the slashes. Inside, away from the edges: 0.8s stun at the end. He can't move while casting
-    e:{name:'Rokuren', label:f => f.e2>0 ? 'PART 2' : 'Rokuren', cd:0, est:ZE_EDGE*2, cost:ZE_COST, chan:0, cast(f,a){ sixfold(f, a, 1); }},   // part 2 handled in castSkill
+    e:{name:'Rokuren', label:f => (f.e2>0 && f.e2<=ZE_WIN) ? 'PART 2' : 'Rokuren', cd:0, est:ZE_EDGE*2, cost:ZE_COST, chan:0, cast(f,a){ sixfold(f, a, 1); }},   // part 2 handled in castSkill
     // R: Flaming Thunder God. Huge dragon dash: big damage, burn, brief stun on the first enemy hit. Can't be stopped
     r:{name:'Flaming Thunder God', hud:'Thunder God', chan:0.3, cast(f,a){ zenDash(f, a, 1, false, true); }}
   },
@@ -1944,7 +1944,7 @@ function blink(f, a, range){                       // teleport up to range along
   FX3.blink(f, ox, oy);
 }
 const AF_E_SPD = 380;                              // Air Force (E) flight speed: 320 -> 380
-const AF_CHARGES = [0, 1, 2, 4, 6];               // Midoriya: Air Force charges by gear
+const AF_CHARGES = [0, 2, 3, 4, 6];               // Midoriya: Air Force charges by gear
 function maxCh(f, k){ const sk = SKILLS[f.id] && SKILLS[f.id][k]; return (f.id==='midoriya' && k==='e') ? AF_CHARGES[f.gear||1] : (sk && sk.charges) || 0; }
 function chg(f, k){                                // current charges of a charge skill
   const sk = SKILLS[f.id] && SKILLS[f.id][k];
@@ -1988,10 +1988,10 @@ function castSkill(f, key, ang){
   }
   if (f.id==='zenitsu' && key==='w' && (chg(f,'q') < ZW_COST || f.lunge)) return false;   // Godspeed needs 2 Q charges
   if (f.id==='zenitsu' && key==='e'){               // Sixfold: part 2 (counterclockwise) within 2s, then the full cooldown
-    if (f.e2>0){ if (f.root>0) return false; f.e2 = 0; f.cd.e = sk.cd; f.wpT = 0; sixfold(f, ang, -1); f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true; }
+    if (f.e2>0){ if (f.root>0 || f.e2>ZE_WIN) return false; f.e2 = 0; f.cd.e = sk.cd; f.wpT = 0; sixfold(f, ang, -1); f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true; }
     if (f.cd.e>0 || chg(f,'q') < ZE_COST) return false;
     f.ch.q -= ZE_COST; if (f.cd.q<=0) f.cd.q = skCd(f,'q');
-    sixfold(f, ang, 1); f.e2 = ZE_WIN; f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true;
+    sixfold(f, ang, 1); f.e2 = ZE_LOCK + ZE_WIN; f.last = key; f.castN = (f.castN||0) + 1; f.commitT = Math.max(f.commitT||0, ZE_T); return true;
   }
   if (f.id==='tanjiro' && key==='r'){             // Hinokami: on with a full ult; R again ends it early and resets Q/W/E
     if (f.hino){ f.hino = false; f.hinoWin = 0; f.cd.q = f.cd.w = f.cd.e = 0; f.ch.q = maxCh(f, 'q'); fx.push({x:f.x, y:f.y-f.r-16, t:0.8, txt:'RESET'}); f.last = key; return true; }
@@ -3028,7 +3028,7 @@ function hud(){
     const cdLeft = (f.cd[kk]||0) > 0.05 ? f.cd[kk] : 0;
     const gearFlash = kk==='r' && f.gearWin>0;
     const lockOn = f.id==='tanjiro' && kk==='e' && fluxLock(f);   // Tanjiro: E is free while the enemy is knocked up
-    const ready = lockOn || (kk==='r' ? (f.ult>=100 || f.howT>=0 || gearFlash) : sk.cost ? ((kk==='e' && f.e2>0) || chg(f,'q') >= sk.cost) : sk.charges ? charges>0 : staged ? f.qgap<=0 : cdLeft<=0);
+    const ready = lockOn || (kk==='r' ? (f.ult>=100 || f.howT>=0 || gearFlash) : sk.cost ? ((kk==='e' && f.e2>0 && f.e2<=ZE_WIN) || chg(f,'q') >= sk.cost) : sk.charges ? charges>0 : staged ? f.qgap<=0 : cdLeft<=0);
     drawIcon(f, kk, x, y, bw, bh);                     // themed picture for each ability
     if (kk==='r'){                                     // ult meter: bar up the right edge
       const u = Math.min(100, f.ult);
@@ -3046,7 +3046,7 @@ function hud(){
     ctx.textBaseline = 'middle';
     const kn = kbName(KB[kk]); ctx.textAlign = 'left'; ctx.fillStyle = '#fff'; ctx.font = kn.length > 2 ? 'bold 9px monospace' : 'bold 13px monospace'; ctx.fillText(kn, x+5, y+10); const knw = ctx.measureText(kn).width;
     if (kk==='r'){ ctx.font = 'bold 8px monospace'; ctx.fillStyle = gearFlash ? '#b8ff6a' : '#ffd93d'; ctx.fillText(gearFlash ? 'GEAR' : 'ULT', x+9+knw, y+10); }   // what R does right now
-    if (sk.cost){ ctx.save(); ctx.textAlign = 'right'; ctx.font = 'bold 10px monospace'; ctx.fillStyle = ready ? '#ffd93d' : '#889'; ctx.fillText(kk==='e' && f.e2>0 ? 'FREE' : '-'+sk.cost, x+bw-5, y+10); ctx.restore(); }   // charges this costs
+    if (sk.cost){ ctx.save(); ctx.textAlign = 'right'; ctx.font = 'bold 10px monospace'; ctx.fillStyle = ready ? '#ffd93d' : '#889'; ctx.fillText(kk==='e' && f.e2>0 && f.e2<=ZE_WIN ? 'FREE' : '-'+sk.cost, x+bw-5, y+10); ctx.restore(); }   // charges this costs
     if (sk.charges){                                   // charge pips: filled = ready
       for (let c=0, mc=maxCh(f,kk); c<mc; c++){
         ctx.beginPath(); ctx.arc(x+bw-8-c*(mc>4 ? 7 : 11), y+10, mc>4 ? 3 : 4, 0, 7);
@@ -3193,7 +3193,7 @@ const FX3 = (() => {
     for (let ri = 0; ri < 9; ri++){ const th = (ri / 8 - 0.5) * Math.PI / 2 * 0.96; for (let k = 0; k < 7; k++){
       const rr = 14 + k * 15.5 + (Math.random() - 0.5) * 7, jt = (Math.random() - 0.5) * 0.07;
       st.push({th: th + jt, rr, delay: rr / 106 * 0.14 + Math.random() * 0.03, life: 0.28 + Math.random() * 0.2, z: 38 + (Math.random() - 0.5) * 8, ph: Math.floor(Math.random() * 3), big: k / 6}); } }
-    stars.push({ox, oy, wy: f.y + Math.sin(a) * 24, a, t: -0.24, st, flash: false});
+    stars.push({ox, oy, wy: f.y + Math.sin(a) * 24, a, t: 0, st, flash: false}); flashT = 0.2;
   }
   function bakUpdate(dt){
     const now = new Map();
