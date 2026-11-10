@@ -1599,7 +1599,7 @@ const SKILLS = {
     // W: Shadow Exchange: sinks into a shadow pool (untargetable 1.5s); soldiers dissipate, re-summon at him and dash at the enemy
     w:{name:"Ruler's Authority", hud:'Authority', cd:12, est:0, chan:0, cast(f,a){ JW.w(f); }},
     // E: Dagger Rush: 2 charges; a hit marks the enemy for 3s, every soldier dashes at him and keeps attacking
-    e:{name:'Dagger Rush', hud:'Dagger', cd:5, est:2, charges:2, chan:0.1, cast(f,a){ JW.dagger(f, a); }},
+    e:{name:'Dagger Rush', hud:'Dagger', cd:6, est:0.4, charges:1, chan:0.1, cast(f,a){ JW.dagger(f, a); }},
     // R: Arise: full bar. Last ability Q = Iron, W = Igris, E = Beru (default Iron), summoned at 12 o'clock
     r:{name:'Arise', hud:'Arise', chan:0.65, cast(f,a){ JW.r(f); }}
   },
@@ -3981,7 +3981,7 @@ const ZN = (() => {
 // Q Ruler's Authority (soldiers to 2 + 10 o'clock, -20% dmg, block shots) | W Shadow Exchange (sink, untargetable 1.5s, soldiers tp + dash)
 // E Dagger Rush (mark: soldiers dash + chase) | R Arise (Q=Iron, W=Igris, E=Beru at 12 o'clock) ----------
 const JW = (() => {
-  const AURA_R = 170, AURA_FILL = 5, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 100, SOL_UP = 1.2, BAR_T = 2, W_T = 1.5, WDASH = 93;
+  const AURA_R = 170, AURA_FILL = 5, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 100, SOL_UP = 1.44, BAR_T = 2, W_T = 1.5, WDASH = 93;
   const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 12.85, iron: 25.65, igris: 22.35, beru: 12.85}, DODGE_CD = 10, HEAL_W = 0.3;
   const has = typeof document !== 'undefined' && !!document.createElement;
   let T = 0;
@@ -4011,13 +4011,13 @@ const JW = (() => {
   // ---- abilities ----
   function q(f){
     f.jwBar = BAR_T;
-    for (const s of mine(f)){ s.chase = false; const p = pos2and10(f, s.slot); goTo(s, p.x, p.y, 900); }
+    for (const s of mine(f)){ const p = pos2and10(f, s.slot); goTo(s, p.x, p.y, 900); }
     fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: "RULER'S AUTHORITY"});
   }
   function w(f){
     f.inv = Math.max(f.inv, W_T); f.root = Math.max(f.root, W_T); f.jwW = W_T; f.vx = f.vy = 0;
     for (const s of mine(f)){
-      s.chase = false; s.go = null;
+      s.go = null;
       play(s, 'dissipate', 40, () => {                       // very fast dissipate, then a very fast summon next to him
         const p = pos2and10(f, s.slot); s.x = p.x; s.y = p.y; s.hp = Math.min(s.max, s.hp + s.max * HEAL_W);
         play(s, 'summon', 40, () => { const tg = foe(f), a = ang(f, tg) + (s.slot === 1 ? -1 : 1) * 0.9, d = ringPoint(tg, 60, a + Math.PI), dd = Math.hypot(d.x - s.x, d.y - s.y), k = dd > WDASH ? WDASH / dd : 1; goTo(s, s.x + (d.x - s.x) * k, s.y + (d.y - s.y) * k, 1100); });
@@ -4026,7 +4026,12 @@ const JW = (() => {
     fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: 'SHADOW EXCHANGE'});
   }
   function dagger(f, a){
-    proj(f, a, {spd: 820, r: 10, dmg: 2, life: 0.6, line: true, color: '#b48cff', front: f.r + 8, onHit: tg => mark(f, tg)});
+    const tg = foe(f);                       // point and click: always lands on the enemy, no aiming
+    if (!tg || tg.hp <= 0) return;
+    const da = Math.atan2(tg.y - f.y, tg.x - f.x), dl = Math.hypot(tg.x - f.x, tg.y - f.y);
+    beams.push({x: f.x, y: f.y, a: da, len: dl, w: 10, t: 0.15, color: '#b48cff'});
+    if (tg.inv > 0) return;
+    hit(tg, 0.4, f); if (tg.hp > 0){ tg.lslowT = Math.max(tg.lslowT || 0, 1.5); mark(f, tg); }   // 20% slow for 1.5s
   }
   function mark(f, tg){
     tg.jwMark = MARK_T; fx.push({x: tg.x, y: tg.y - tg.r - 16, t: 0.8, txt: 'MARKED'});
