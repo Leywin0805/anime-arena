@@ -1294,7 +1294,7 @@ const autoCd = f => f.id==='todoroki' ? TODO_AUTO_CD : MELEE_CD;    // One For A
 function doAuto(f){                               // swing + set the auto cooldown
   if (f.chan) return;                              // no autos while channeling
   if (f.id==='bakugo' && f.empT>0){                // empowered auto locks onto an enemy inside its reach
-    const lt = f.team==='p' ? enemy : player;
+    const lt = foe(f);
     if (lt && lt.hp>0 && Math.hypot(lt.x-f.x, lt.y-f.y) < MELEE_R + BLAST_REACH + lt.r) f.aim = Math.atan2(lt.y-f.y, lt.x-f.x);
   }
   auto3(f, f.id==='sukuna' && f.cleaveT>0);
@@ -1329,7 +1329,7 @@ function melee(f){                               // basic attack: short-range sw
   const cleave = f.cleaveT > 0; f.cleaveT = 0;      // Sukuna: first auto after Cleave's dash is a wide slash
   const reachA = MELEE_R + (cleave ? CLEAVE_REACH : emp ? BLAST_REACH : 0), halfA = cleave ? CLEAVE_HALF : emp ? BLAST_HALF : AUTO_HALF;
   if (f.id==='zenitsu') ZN.melee(f, f.a3 ? f.a3.combo : 1); else if (f.id==='tanjiro') TJ3.melee(f, f.a3 ? f.a3.combo : 1); else if (SPR3D[f.id]) FX3.melee(f, cleave, f.a3 ? f.a3.combo : 1, emp); else arcs.push({x:f.x, y:f.y, off:f.r, a:f.aim, r:reachA, t:0.2, h:halfA, c: cleave ? '#ff5a5a' : emp ? '#ff9a1f' : f.id==='tanjiro' ? (f.threadReady ? '#ff3355' : f.hino ? '#ff7a2a' : '#7fd3ff') : '#ffffff'});
-  const tg = f.team==='p' ? enemy : player;
+  const tg = foe(f);
   const d = Math.hypot(tg.x-f.x, tg.y-f.y);
   let da = Math.abs(Math.atan2(tg.y-f.y, tg.x-f.x) - f.aim); if (da > Math.PI) da = 2*Math.PI - da; da = Math.min(da, Math.PI);
   const second = f.id==='midoriya' && f.aaChain===1;
@@ -1378,6 +1378,7 @@ function ultTick(f, dt){
   f.ult = Math.min(100, f.ult + ULT_BASE*(1 + ULT_CATCH*behind)*dt);
 }
 function hit(f, dmg, src, kx, ky){
+  if (f.__sh) return JW.hurtProxy(f, dmg, src, kx, ky);
   if (f.inv > 0 || f.hp <= 0) return;
   if (src && src.phosT>0) dmg *= 1.1;                // Todoroki Phosphor: +10% damage
   if (f.cocoon && src && !HIT_TICK){                 // Vortex cocoon: any hit breaks it; same element gets +15%
@@ -1410,7 +1411,8 @@ function hit(f, dmg, src, kx, ky){
 }
 
 // ---------- SKILLS (per character) ----------
-const foe = f => f.team==='p' ? enemy : player;
+let JW_T = null;
+const foe = f => { const t = f.team==='p' ? enemy : player; return JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t; };   // Jin-Woo's shadows can be the target: all skill geometry hits them
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 85;                              // Sukuna W teleport distance
@@ -3584,7 +3586,10 @@ function spaceFloor(cx, cy, R, t, pal, swirl){
   const ownsZone = z => (z.kind === 'blue' || z.kind === 'boom' || z.kind === 'domain') && z.src && z.src.id === 'gojo' || z.kind === 'boom' && z.src && z.src.id === 'bakugo' || z.kind === 'shrine' || z.kind === 'blinkfx';
   const ownsBullet = b => !!(b.wave || (b.src && b.src.id === 'bakugo' && b.line) || (b.src && ((b.src.id === 'gojo' && (b.track || b.aura)) || (b.src.id === 'sukuna' && b.home))));
   const ownsBeam = bm => bm.color === '#ff3b3b';
-  return {sheets: FXS, smear, update, ground, depth, air, melee, blink, grenade, flyAng, ownsZone, ownsBullet, ownsBeam, get shake(){ return shake; }};
+  function cutPoly(pts, w, heal, kp){                                  // carve a groove through world points (Igris slash, Iron smash): same ground cut as Sukuna's waves
+    const sp = pts.map(q => [SX(q[0]), SY(q[1])]); for (let i = 0; i < sp.length - 1; i++){ const dx = sp[i+1][0] - sp[i][0], dy = sp[i+1][1] - sp[i][1], L = Math.hypot(dx, dy) || 1, g = newGroove(w, -dy / L, dx / L, heal); grooveAt(g, sp[i][0], sp[i][1]); grooveAt(g, sp[i+1][0], sp[i+1][1]); if (i % 2 === 0) kick(sp[i][0], sp[i][1], -dy / L, dx / L, dx / L, dy / L, kp || 0.8); }
+  }
+  return {sheets: FXS, smear, cutPoly, update, ground, depth, air, melee, blink, grenade, flyAng, ownsZone, ownsBullet, ownsBeam, get shake(){ return shake; }};
 })();
 
 // ---------- MIDORIYA FX (3D sprite version): Black Whip spin + wrap, Smoke Screen puffs, Air Force shots, gear-up / One For All bursts + aura ----------
@@ -3974,8 +3979,8 @@ const ZN = (() => {
 // Q Ruler's Authority (soldiers to 2 + 10 o'clock, -20% dmg, block shots) | W Shadow Exchange (sink, untargetable 1.5s, soldiers tp + dash)
 // E Dagger Rush (mark: soldiers dash + chase) | R Arise (Q=Iron, W=Igris, E=Beru at 12 o'clock) ----------
 const JW = (() => {
-  const AURA_R = 230, AURA_FILL = 7, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 150, BAR_T = 2, W_T = 1.5;
-  const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 9, iron: 45, igris: 30, beru: 12}, DODGE_CD = 10, HEAL_W = 0.3;
+  const AURA_R = 230, AURA_FILL = 10, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 150, BAR_T = 2, W_T = 1.5;
+  const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 40, iron: 54, igris: 47, beru: 27}, DODGE_CD = 10, HEAL_W = 0.3;
   const has = typeof document !== 'undefined' && !!document.createElement;
   let T = 0;
   function at(wx, wy, fn){ ctx.save(); ctx.translate(wx, wy); ctx.scale(1 / CAM_Z, 1 / (CAM_Z * TILT)); ctx.imageSmoothingEnabled = false; fn(); ctx.restore(); }
@@ -3991,10 +3996,12 @@ const JW = (() => {
     play(s, 'dissipate', fps || 14, () => { s.dead = true; if (s.id === 'shadow') s.f.jwLock[s.slot] = LOCK; }); }
   function goTo(s, x, y, spd){ s.go = {x, y}; s.spd = spd; }
   function ringPoint(c, r, a){ return {x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r}; }
+  const TP_R = 310;                          // Beru's teleport ring: wider than Monarch's Domain (230) and the Domain Expansion
+  function tpSpot(tg){ const a = Math.random() * 6.28, p = ringPoint(tg, TP_R, a); return {x: Math.max(40, Math.min(W - 40, p.x)), y: Math.max(40, Math.min(H - 40, p.y))}; }
   function pos2and10(f, slot){ const a = ang(f, foe(f)) + (slot === 1 ? -1 : 1) * Math.PI / 3; return ringPoint(f, 90, a); }
   function hurtSol(s, dmg, b){                // enemy damage on a shadow: HP bar, Beru dodge, Iron halves piercing hits
     if (s.dis || s.dead || s.anim && s.anim.name === 'summon') return;
-    if (s.id === 'beru' && s.dodge <= 0){ s.dodge = DODGE_CD; const tg = foe(s.f); s.tpT = 0.12; s.tpTo = ringPoint(tg, 120, Math.random() * 6.28); fx.push({x: s.x, y: s.y - 40, t: 0.6, txt: 'DODGE'}); return; }
+    if (s.id === 'beru' && s.dodge <= 0){ s.dodge = DODGE_CD; const tg = foe(s.f); s.tpT = 0.12; s.tpTo = tpSpot(tg); fx.push({x: s.x, y: s.y - 40, t: 0.6, txt: 'DODGE'}); return; }
     if (s.id === 'iron' && b && b.pierce && !b.jwHalf){ b.jwHalf = true; b.dmg *= 0.5; }
     s.hp -= dmg; fx.push({x: s.x, y: s.y - 36, t: 0.5, txt: '-' + (Math.round(dmg * 10) / 10)});
     if (s.hp <= 0) dissipate(s);
@@ -4033,10 +4040,13 @@ const JW = (() => {
   // ---- per-frame ----
   function updateSol(s, dt){
     const f = s.f, tg = foe(f);
-    s.t += dt; s.atk -= dt; s.dodge = Math.max(0, s.dodge - dt); s.lunge = Math.max(0, s.lunge - dt);
+    if (s.kvx || s.kvy){ s.x += s.kvx * dt; s.y += s.kvy * dt; const dk = Math.exp(-7 * dt); s.kvx *= dk; s.kvy *= dk; if (Math.hypot(s.kvx, s.kvy) < 5) s.kvx = s.kvy = 0; s.x = Math.max(20, Math.min(W - 20, s.x)); s.y = Math.max(20, Math.min(H - 20, s.y)); }
+    if (s.px && (s.px.kx || s.px.ky)){ s.kvx = (s.kvx || 0) + s.px.kx; s.kvy = (s.kvy || 0) + s.px.ky; s.px.kx = s.px.ky = 0; }
+    s.t += dt; s.atk -= dt; if (s.wing > 0){ s.wing -= dt; const jw = s.f, tg2 = foe(jw); if (jw.hp > 0 && tg2.hp > 0 && Math.hypot(tg2.x - s.x, tg2.y - s.y) < 150 && jw.ult < 100) jw.ult = Math.min(100, jw.ult + AURA_FILL * dt); if (tg2.hp > 0 && Math.hypot(tg2.x - s.x, tg2.y - s.y) < 150) jw.jwFeed = 0.1; }  // wings out: Beru's own small aura feeds the bar
+    s.t += 0; s.dodge = Math.max(0, s.dodge - dt); s.lunge = Math.max(0, s.lunge - dt);
     if (s.anim){ s.anim.t += dt; if (Math.floor(s.anim.t * s.anim.fps) >= s.anim.n){ const d = s.anim.done; s.anim = null; d && d(); } }
     s.life -= dt; if (s.life <= 0 && !s.dis) dissipate(s);
-    if (s.tpT >= 0){ s.tpT -= dt; if (s.tpT < 0 && s.tpTo){ s.x = s.tpTo.x; s.y = s.tpTo.y; s.tpTo = null; fx.push({x: s.x, y: s.y - 20, t: 0.3, txt: '~'}); } }
+    if (s.tpT >= 0){ s.tpT -= dt; if (s.tpT < 0 && s.tpTo){ s.x = s.tpTo.x; s.y = s.tpTo.y; s.tpTo = null; s.wing = 1.0; fx.push({x: s.x, y: s.y - 20, t: 0.3, txt: '~'}); } }
     if (s.pend){ s.pend.t -= dt; if (s.pend.t <= 0){ const fn = s.pend.fn; s.pend = null; if (!s.dis && tg.hp > 0) fn(); } }
     const busy = !!s.anim || s.dis, step = (x, y, spd) => { const dx = x - s.x, dy = y - s.y, L = Math.hypot(dx, dy); if (L < 6) return false; const m = Math.min(L, spd * dt); s.x += dx / L * m; s.y += dy / L * m; s.dir = dir8(dx, dy); s.mv = true; return true; };
     s.mv = false;
@@ -4062,21 +4072,22 @@ const JW = (() => {
     else if (s.id === 'igris' && d < 130 + tg.r){
       s.atk = 4; strike(4 / 14, 14, () => {
         const a2 = ang(s, tg); FX3.smear(s, 'h', a2, 112 * Math.PI / 180, -112 * Math.PI / 180, {R: 84, w: 24, h: 30, tp: 0.3, lo: 0.75, cols: PUR});
+        { const pts = []; for (let k = 0; k <= 14; k++){ const th = a2 - Math.PI / 2 + Math.PI * k / 14; pts.push([s.x + Math.cos(th) * 105, s.y + Math.sin(th) * 105]); } FX3.cutPoly(pts, 2.2, 1.6, 0.9); }   // the 180 degree cut scars the ground
         let da = Math.abs(Math.atan2(tg.y - s.y, tg.x - s.x) - a2); if (da > Math.PI) da = 2 * Math.PI - da;
         if (da < Math.PI / 2){ const before = tg.hp; hit(tg, 6, f); s.dealt += Math.max(0, before - tg.hp); }
       });
     }
     else if (s.id === 'iron' && d < 90 + tg.r){
       s.atk = 3; strike(6 / 14, 14, () => {
-        const a2 = ang(s, tg); craters.push({x: s.x + Math.cos(a2) * 62, y: s.y + Math.sin(a2) * 62, t: 0, T: 4.5, seed: Math.random() * 99});
-        zones.push({kind: 'boom', x: s.x + Math.cos(a2) * 62, y: s.y + Math.sin(a2) * 62, r: 90, t: 0.3, tick: 0, src: null, color: '#8a4bff'});
+        const a2 = ang(s, tg), cx = s.x + Math.cos(a2) * 62, cy = s.y + Math.sin(a2) * 62;
+        for (let k = 0; k < 7; k++){ const th = k * 0.9 + Math.random() * 0.4, l1 = 34 + Math.random() * 24, l2 = l1 + 22 + Math.random() * 26, w1 = th + (Math.random() - 0.5) * 0.5; FX3.cutPoly([[cx + Math.cos(th) * 8, cy + Math.sin(th) * 8], [cx + Math.cos(th) * l1, cy + Math.sin(th) * l1], [cx + Math.cos(w1) * l2, cy + Math.sin(w1) * l2]], 2.6, 3.2, 1.2); }   // the smash cracks and gouges the ground like Sukuna's cuts
         if (Math.hypot(tg.x - s.x, tg.y - s.y) < 95 + tg.r){ hit(tg, 1, f); if (tg.inv <= 0 && tg.hp > 0){ tg.stun = Math.max(tg.stun, 1); fx.push({x: tg.x, y: tg.y - tg.r - 14, t: 0.7, txt: 'SLAMMED'}); } }
       });
     }
     else if (s.id === 'beru' && d < 68 + tg.r){
       s.atk = 1; strike(2 / 14, 14, () => {
         const a2 = ang(s, tg); FX3.smear(s, 'v', a2, 115 * Math.PI / 180, -60 * Math.PI / 180, {R: 66, w: 18, lean: (s.slashN = (s.slashN || 0) + 1) % 2 ? -0.55 : 0.55, cols: PUR}); hit(tg, AUTO_DMG, f);
-        s.tpT = 0.2; s.tpTo = ringPoint(tg, 120, Math.random() * 6.28);          // after a slash: teleport to a random spot around the enemy
+        s.tpT = 0.2; s.tpTo = tpSpot(tg);          // after a slash: teleport to a random spot on a big ring around the enemy
       });
     }
   }
@@ -4088,7 +4099,9 @@ const JW = (() => {
       f.jwLock[0] = Math.max(0, f.jwLock[0] - dt); f.jwLock[1] = Math.max(0, f.jwLock[1] - dt);
       f.jwBar = Math.max(0, (f.jwBar || 0) - dt); f.jwW = Math.max(0, (f.jwW || 0) - dt);
       const tg = foe(f);
-      if (f.hp > 0 && tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < AURA_R && f.ult < 100) f.ult = Math.min(100, f.ult + AURA_FILL * dt);   // aura fills the bar
+      if (f.hp > 0){ const inside = tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < AURA_R;           // aura fills the bar; 2s after the enemy leaves it drains at the same rate
+        if (inside || f.jwFeed > 0){ f.jwOut = 0; if (inside && f.ult < 100) f.ult = Math.min(100, f.ult + AURA_FILL * dt); } else { f.jwOut = (f.jwOut || 0) + dt; if (f.jwOut > 2) f.ult = Math.max(0, f.ult - AURA_FILL * dt); }
+        f.jwFeed = Math.max(0, (f.jwFeed || 0) - dt); }
       if (f.hp > 0 && f.ult >= SUMMON_AT && !f.jwW) for (const slot of [0, 1]){                                                                  // 20%: free soldiers
         if (f.jwLock[slot] > 0 || sol.some(s => s.f === f && s.id === 'shadow' && s.slot === slot && !s.dead)) continue;
         const p = pos2and10(f, slot); mk('shadow', f, p.x, p.y, slot);
@@ -4097,10 +4110,11 @@ const JW = (() => {
         for (const s of mine(f)) if (Math.hypot(b.x - s.x, b.y - s.y) < 26 + b.r){ b.life = 0; fx.push({x: s.x, y: s.y - 20, t: 0.5, txt: 'BLOCK'}); break; } }
     }
     for (const f of [player, enemy]){ if (f.id !== 'jinwoo') continue;
-      for (const b of bullets){ if (b.team === f.team || b.life <= 0 || b.aura || b.track || b.wave || !(b.dmg > 0)) continue;
+      for (const b of bullets){ if (b.team === f.team || b.life <= 0) continue;
+        if (b.aura){ b.jwTick = (b.jwTick || 0) - dt; if (b.jwTick <= 0){ b.jwTick = 0.25; for (const s of mine(f)){ const d = Math.hypot(b.x - s.x, b.y - s.y); if (d < b.aura.r){ if (d > 4){ const pl = b.aura.pull * 0.25; s.x += (b.x - s.x) / d * pl; s.y += (b.y - s.y) / d * pl; } if (!(f.jwBar > 0)) hurtSol(s, b.aura.dps * 0.25, null); } } } continue; }                // Hollow Purple: pull + area damage
+        if (!(b.dmg > 0)) continue;
         for (const s of mine(f)){ if (b.hit && b.hit.has(s)) continue; if (Math.hypot(b.x - s.x, b.y - s.y) < 22 + b.r){ if (b.hit) b.hit.add(s); if (!(f.jwBar > 0)) hurtSol(s, b.dmg, b); if (!b.pierce) b.life = 0; break; } } }
-      for (const a of arcs){ if (a.jwSeen) continue; a.jwSeen = true; const o = foe(f); if (Math.hypot(a.x - o.x, a.y - o.y) > 14) continue;      // an arc from the enemy: shadows inside the cone take a hit
-        for (const s of mine(f)){ const dx = s.x - a.x, dy = s.y - a.y, d = Math.hypot(dx, dy); if (d > a.r + (a.off || 0) + 14) continue; let da = Math.abs(Math.atan2(dy, dx) - a.a); if (da > Math.PI) da = 2 * Math.PI - da; if (da <= a.h + 0.2 && !(f.jwBar > 0)) hurtSol(s, AUTO_DMG, null); } } }
+    }
     for (const f of [player, enemy]) if (f.jwMark > 0) f.jwMark -= dt;
     for (const s of sol) updateSol(s, dt);
     for (let i = sol.length - 1; i >= 0; i--) if (sol[i].dead || sol[i].f.hp <= 0) sol.splice(i, 1);
@@ -4112,6 +4126,21 @@ const JW = (() => {
     const fr = tt < sink ? Math.floor(tt * A.fps) : tt < rise ? 6 + Math.floor(tt * A.fps) % 4 : 10 + Math.min(5, Math.floor((tt - rise) * A.fps));
     return {name: 'w_exchange', t: (fr + 0.5) / A.fps, mode: 'clamp'};
   }
+  function drawWings(s){                      // Beru spreads huge insect wings for ~1s after a teleport (drawn in the unscaled screen frame, behind the body)
+    const k = Math.min(1, s.wing / 0.25, (1 - s.wing) / 0.06 + 0.4), fl = Math.sin(T * 24) * 0.07, sp = Math.min(1, (1 - s.wing) / 0.1 + 0.45);
+    ctx.save(); ctx.globalAlpha = Math.min(1, k * 1.3); ctx.shadowColor = '#9b5cff'; ctx.shadowBlur = 10;
+    for (const sg of [-1, 1]){
+      ctx.save(); ctx.translate(sg * 5, -36); ctx.scale(sg, 1); ctx.rotate(-0.25 - fl);
+      const L = 78 * sp, H = 52 * sp;
+      const gr = ctx.createLinearGradient(0, 0, L, -H); gr.addColorStop(0, 'rgba(15,4,40,.95)'); gr.addColorStop(1, 'rgba(110,60,230,.55)');
+      ctx.fillStyle = gr; ctx.strokeStyle = '#c9a0ff'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(L * 0.3, -H * 1.1, L * 0.85, -H * 1.25, L, -H * 0.55); ctx.bezierCurveTo(L * 0.8, -H * 0.1, L * 0.55, H * 0.3, L * 0.2, H * 0.45); ctx.bezierCurveTo(L * 0.12, H * 0.3, L * 0.05, H * 0.15, 0, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(220,190,255,.75)';
+      for (let v = 0; v < 4; v++){ ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(L * 0.5, -H * (0.2 + v * 0.28), L * (0.7 + v * 0.1), -H * (0.5 + v * 0.1) + v * 4); ctx.stroke(); }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
   function drawSol(s){
     const S = SPR3D[s.id]; let name, t, mode = 'clamp';
     if (s.anim){ name = s.anim.name; t = s.anim.t; } else { name = s.mv ? (s.go && s.spd >= 800 ? 'dash' : 'walk') : 'idle'; t = s.t; mode = 'loop'; }
@@ -4121,6 +4150,7 @@ const JW = (() => {
     if (s.lunge > 0){ const k = Math.sin(s.lunge / 0.2 * Math.PI) * 10; ox = Math.cos(s.la) * k; oy = Math.sin(s.la) * k; }
     at(s.x + ox, s.y + oy, () => {
       ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, 7); ctx.fill();
+      if (s.id === 'beru' && s.wing > 0) drawWings(s);
       if (s.tpT >= 0 && s.tpTo) ctx.globalAlpha = 0.35;
       ctx.drawImage(A.img, fr * S.FW, row * S.FH, S.FW, S.FH, -S.FW / 2, -S.GY, S.FW, S.FH);
       if (!s.dis){ const bw = s.id === 'iron' ? 40 : 30, k = Math.max(0, s.hp / s.max); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(-bw / 2 - 1, -S.GY - 9, bw + 2, 6); ctx.fillStyle = k > 0.35 ? '#a56bff' : '#ff6b9a'; ctx.fillRect(-bw / 2, -S.GY - 8, bw * k, 4); }
@@ -4132,7 +4162,6 @@ const JW = (() => {
   }
   function depth(push){
     for (const s of sol) push({y: s.y, fn: () => drawSol(s)});
-    auraFlames(push);
     for (const f of jws()) if (f.jwBar > 0) push({y: f.y + 1, fn: () => drawBarrier(f)});
   }
   function drawFloorFx(dt){
@@ -4161,18 +4190,15 @@ const JW = (() => {
     }
   }
   function drawAura(f, near, tg){             // Monarch's Domain floor: black void, huge rotating rune circle (hexagram + glyph ring), spiral arms, mist, rim flare when an enemy is inside
-    const R = AURA_R, k = near ? 1 : 0.7, TAU = Math.PI * 2, pulse = near ? 0.8 + 0.2 * Math.sin(T * 7) : 1, rot = T * 0.35;
+    const R = AURA_R, k = near ? 0.6 : 0.38, TAU = Math.PI * 2, pulse = near ? 0.85 + 0.15 * Math.sin(T * 6) : 1, rot = T * 0.1;
     ctx.save(); ctx.translate(f.x, f.y); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, R);                                                   // black void floor, violet glow toward the rim
     g.addColorStop(0, 'rgba(2,0,8,' + 0.72 * k + ')'); g.addColorStop(0.62, 'rgba(26,6,70,' + 0.6 * k + ')'); g.addColorStop(0.9, 'rgba(90,40,200,' + 0.5 * k + ')'); g.addColorStop(1, 'rgba(190,140,255,' + 0.6 * k * pulse + ')');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.fill();
-    ctx.shadowColor = '#9b5cff'; ctx.shadowBlur = near ? 26 : 14;
-    ctx.strokeStyle = 'rgba(225,205,255,' + (0.95 * k) + ')'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();            // solid bright rim
+    ctx.shadowColor = '#9b5cff'; ctx.shadowBlur = near ? 10 : 5;
+    ctx.strokeStyle = 'rgba(225,205,255,' + (0.95 * k) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();            // rim
     ctx.strokeStyle = 'rgba(170,120,255,' + (0.9 * k) + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, R * 0.93, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, R * 0.7, 0, TAU); ctx.stroke();
     ctx.setLineDash([4, 9]); ctx.lineDashOffset = -T * 50; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, R * 0.82, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
-    ctx.lineWidth = 3;                                                                                       // hexagram, two interlocked triangles counter-rotating
-    for (let tri = 0; tri < 2; tri++){ ctx.strokeStyle = tri ? 'rgba(200,160,255,' + 0.85 * k + ')' : 'rgba(150,100,255,' + 0.85 * k + ')'; ctx.beginPath();
-      for (let n = 0; n <= 3; n++){ const a = (tri ? -rot * 1.4 : rot * 1.4) + n * TAU / 3 + tri * Math.PI / 3 * 3, x = Math.cos(a) * R * 0.7, y = Math.sin(a) * R * 0.7; n ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke(); }
     ctx.lineWidth = 2.2; ctx.fillStyle = 'rgba(230,210,255,' + 0.9 * k + ')';                               // glyph ring: 16 alternating rune marks
     for (let i = 0; i < 16; i++){ const a = i * TAU / 16 - rot, cx = Math.cos(a) * R * 0.855, cy = Math.sin(a) * R * 0.855, ca = Math.cos(a), sa = Math.sin(a); ctx.strokeStyle = 'rgba(225,200,255,' + 0.9 * k + ')'; ctx.beginPath();
       if (i % 4 === 0){ ctx.moveTo(cx - ca * 9, cy - sa * 9); ctx.lineTo(cx + ca * 9, cy + sa * 9); ctx.moveTo(cx - sa * 7, cy + ca * 7); ctx.lineTo(cx + sa * 7, cy - ca * 7); }
@@ -4183,7 +4209,7 @@ const JW = (() => {
     for (let arm = 0; arm < 6; arm++){ ctx.strokeStyle = 'rgba(190,140,255,' + (0.38 * k) + ')'; ctx.beginPath();
       for (let n = 0; n <= 26; n++){ const u = n / 26, a = arm * TAU / 6 + u * 2.8 - T * 1.1, r = R * (0.05 + 0.62 * u); n ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
       ctx.stroke(); }
-    for (let i = 0; i < 30; i++){                                                                            // embers spiraling inward
+    for (let i = 0; i < 14; i++){                                                                            // embers spiraling inward
       const u = (T * 0.22 + i * 0.1618) % 1, a = i * 2.399 + T * 0.6 + u * 3, r = R * (1 - u * 0.95); ctx.globalAlpha = Math.sin(u * Math.PI) * 0.9 * k; ctx.fillStyle = i % 3 ? '#b48cff' : '#ffffff';
       ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 1.6 + 1.6 * (1 - u), 0, TAU); ctx.fill(); }
     ctx.globalAlpha = 1;
@@ -4206,8 +4232,8 @@ const JW = (() => {
   }
   function auraFlames(push){                  // a ring of shadow flames burning on the rim: taller and brighter when an enemy is inside; depth-sorted so fighters stand in front of / behind them
     for (const f of jws()){
-      const tg = foe(f), near = tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < AURA_R, k = near ? 1 : 0.75, N = 44;
-      for (let i = 0; i < N; i++){ const a = i * Math.PI * 2 / N + T * 0.05, wx = f.x + Math.cos(a) * AURA_R, wy = f.y + Math.sin(a) * AURA_R, hh = (26 + 26 * hash(i)) * (near ? 1.5 : 1) * (0.8 + 0.2 * Math.sin(T * 6 + i * 1.7)), wd = 7 + 5 * hash(i + 90);
+      const tg = foe(f), near = tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < AURA_R, k = near ? 0.55 : 0.35, N = 30;
+      for (let i = 0; i < N; i++){ const a = i * Math.PI * 2 / N + T * 0.05, wx = f.x + Math.cos(a) * AURA_R, wy = f.y + Math.sin(a) * AURA_R, hh = (10 + 12 * hash(i)) * (near ? 1.35 : 1) * (0.8 + 0.2 * Math.sin(T * 6 + i * 1.7)), wd = 4 + 3 * hash(i + 90);
         push({y: wy, fn: () => drawFlame(wx, wy, hh, wd, i, k)}); }
     }
   }
@@ -4230,10 +4256,28 @@ const JW = (() => {
     if (dist < 480 && chg(f, 'e') > 0 && castSkill(f, 'e', ea)) return;
     if (dist < 300 && castSkill(f, 'q', ea)) return;
   }
+  // ---- retargeting: an enemy's foe(f) can be a shadow instead of Jin-Woo, so EVERY skill's own geometry hits shadows (hit() on a proxy lands in hurtSol) ----
+  const angd = (a, b) => { let d = Math.abs(a - b) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
+  function proxyOf(s){
+    const p = s.px || (s.px = Object.create(s.f)); p.__sh = s; p.x = s.x; p.y = s.y; p.vx = p.vy = 0; p.hp = Math.max(0.01, s.hp); p.max = s.max; p.r = 20; p.w = 40; p.h = 40; p.inv = s.dis ? 9 : 0;
+    p.stun = p.root = p.slowT = p.vulnT = p.tetherT = p.wpT = p.infT = p.drT = 0; p.cocoon = null; p.tether = null; p.kx = p.ky = 0; p.ult = 0; return p;
+  }
+  function target(f, jw){
+    if (jw.hp <= 0) return jw;
+    const alive = mine(jw).filter(s => !(s.anim && s.anim.name === 'summon'));
+    if (!alive.length) return jw;
+    let best = null, bs = 1e9;
+    if (botControlled(f)){ if (jw.hp < jw.max * 0.25) return jw; for (const s of alive){ const d = Math.hypot(s.x - f.x, s.y - f.y); if (d < 320 && d < bs){ bs = d; best = s; } } return best ? proxyOf(best) : jw; }
+    const sc = (x, y, r) => { const d = Math.hypot(x - f.x, y - f.y) || 1; return Math.max(0, angd(f.aim, Math.atan2(y - f.y, x - f.x)) - Math.atan2(r, d)) * 3 + d / 600; }, js = sc(jw.x, jw.y, jw.r || 20);       // aim error minus the body's angular size; ties go to the closer one
+    for (const s of alive){ if (angd(f.aim, Math.atan2(s.y - f.y, s.x - f.x)) > 0.6 + Math.atan2(20, Math.hypot(s.x - f.x, s.y - f.y) || 1)) continue; const v = sc(s.x, s.y, 20); if (v < js && v < bs){ bs = v; best = s; } }
+    return best ? proxyOf(best) : jw;
+  }
+  function hurtProxy(p, dmg, src, kx, ky){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); if (kx || ky){ s.kvx = (s.kvx || 0) + kx; s.kvy = (s.kvy || 0) + ky; } }
   function reset(){ sol.length = 0; slashes.length = 0; craters.length = 0; }
-  return {sol, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, reset, mark, AURA_R};
+  return {sol, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, target, hurtProxy, reset, mark, AURA_R};
 })();
 
+JW_T = JW.target;
 function draw(){
   updateCam();
   ctx.fillStyle = '#0b1530'; ctx.fillRect(0, 0, SW, SH);
