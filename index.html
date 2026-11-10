@@ -123,7 +123,7 @@ const ROSTER = {
   sasuke:{name:'Sasuke',color:'#5b4bb5',hp:130,spd:205},
   tanjiro:{name:'Tanjiro',color:'#2e8b57',hp:145,spd:190},
   zenitsu:{name:'Zenitsu',color:'#ffd93d',hp:120,spd:230},
-  jinwoo:{name:'Jin-Woo',color:'#9b5cff',hp:95,spd:195},
+  jinwoo:{name:'Sung Jin-Woo',color:'#9b5cff',hp:95,spd:195},
   eren:{name:'Eren',color:'#8b5a2b',hp:160,spd:175},
   levi:{name:'Levi',color:'#9aa5b1',hp:125,spd:225},
   bakugo:{name:'Bakugo',color:'#f28c28',hp:140,spd:200},
@@ -183,7 +183,7 @@ function cast3(f, key, ang, stage, prevLast){       // which animation goes with
     else if (key==='e') play3(f, 'e_infinity', null, {hold:1.5, moveCancel:true});
     else if (key==='r') gojoPurple(f, prevLast) ? play3(f, 'r_purple', ang, {dur:0.62}) : play3(f, 'r_void', ang, {dur:1.1, loopHold:true});
   } else if (f.id==='bakugo'){
-    if (key==='q') play3(f, 'q_grenade', ang, {dur:0.5, t0:0.15});
+    if (key==='q') play3(f, 'q_grenade', ang, {dur:0.25, t0:0.075});
     else if (key==='w') play3(f, 'w_ap', ang, {dur:0.4});
     else if (key==='e') play3(f, 'e_blast', ang, {dur:0.5});
     else if (key==='r' && !(f.howT >= 0)) play3(f, 'r_howitzer', null, {dur:2.7, loopHold:true});
@@ -1295,7 +1295,8 @@ function doAuto(f){                               // swing + set the auto cooldo
   if (f.chan) return;                              // no autos while channeling
   if (f.id==='bakugo' && f.empT>0){                // empowered auto locks onto an enemy inside its reach
     const lt = foe(f);
-    if (lt && lt.hp>0 && Math.hypot(lt.x-f.x, lt.y-f.y) < MELEE_R + BLAST_REACH + lt.r) f.aim = Math.atan2(lt.y-f.y, lt.x-f.x);
+    f.empLock = false;
+    if (lt && lt.hp>0 && Math.hypot(lt.x-f.x, lt.y-f.y) < MELEE_R + BLAST_LOCK + lt.r){ f.aim = Math.atan2(lt.y-f.y, lt.x-f.x); f.empLock = true; }   // lock-on keeps the tight cone; no lock = wider cone, longer reach
   }
   auto3(f, f.id==='sukuna' && f.cleaveT>0);
   melee(f);
@@ -1306,7 +1307,7 @@ function doAuto(f){                               // swing + set the auto cooldo
 }
 function airForce(f, a, dmg=4, extra){          // Midoriya's Air Force shot (E, 2nd auto, One For All); hits build gears
   const fwd = Math.max(0, f.vx*Math.cos(a) + f.vy*Math.sin(a));   // inherit his forward speed: never slower than him
-  proj(f, a, Object.assign({spd:(extra && extra.eShot ? AF_E_SPD : 320) + fwd, r:16, dmg, knock:(f.gear||1)>=2 ? 850 : 450,   // Gear 2+: much stronger knockback
+  proj(f, a, Object.assign({spd:(extra && extra.eShot ? ((f.gear||1)===1 ? AF_E_SPD_G1 : AF_E_SPD) : 320) + fwd, r:16, dmg, knock:(f.gear||1)>=2 ? 850 : 450,   // Gear 2+: much stronger knockback
     life:1.4, air:true, color:'#c8f7d8', front:f.r + 20,
     onHit:() => { const g = f.gear||1; if (g < 4){ f.afHits = (f.afHits||0) + 1; if (f.afHits >= GEAR_NEED[g]){ f.afHits = 0; f.gearWin = 1.0; } } }}, extra));
 }
@@ -1327,7 +1328,7 @@ function melee(f){                               // basic attack: short-range sw
   if (f.id==='todoroki'){ todoBolt(f); return; }    // Todoroki: ranged fire / ice bolts
   const emp = f.empT > 0; f.empT = 0;               // Bakugo: first auto after a Blast is empowered
   const cleave = f.cleaveT > 0; f.cleaveT = 0;      // Sukuna: first auto after Cleave's dash is a wide slash
-  const reachA = MELEE_R + (cleave ? CLEAVE_REACH : emp ? BLAST_REACH : 0), halfA = cleave ? CLEAVE_HALF : emp ? BLAST_HALF : AUTO_HALF;
+  const reachA = MELEE_R + (cleave ? CLEAVE_REACH : emp ? BLAST_REACH : 0), halfA = cleave ? CLEAVE_HALF : emp ? (f.empLock ? BLAST_HALF : BLAST_HALF_WIDE) : AUTO_HALF;
   if (f.id==='zenitsu') ZN.melee(f, f.a3 ? f.a3.combo : 1); else if (f.id==='tanjiro') TJ3.melee(f, f.a3 ? f.a3.combo : 1); else if (SPR3D[f.id]) FX3.melee(f, cleave, f.a3 ? f.a3.combo : 1, emp); else arcs.push({x:f.x, y:f.y, off:f.r, a:f.aim, r:reachA, t:0.2, h:halfA, c: cleave ? '#ff5a5a' : emp ? '#ff9a1f' : f.id==='tanjiro' ? (f.threadReady ? '#ff3355' : f.hino ? '#ff7a2a' : '#7fd3ff') : '#ffffff'});
   const tg = foe(f);
   const d = Math.hypot(tg.x-f.x, tg.y-f.y);
@@ -1415,9 +1416,9 @@ let JW_T = null;
 const foe = f => { const t = f.team==='p' ? enemy : player; return JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t; };   // Jin-Woo's shadows can be the target: all skill geometry hits them
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
-const BLINK_R = 85;                              // Sukuna W teleport distance
-const BLAST_HALF = 75*Math.PI/180, BLAST_REACH = 62;   // Bakugo empowered auto: 90 degree cone, +20 reach
-const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 20;   // empowered Cleave auto: 200 degree cone
+const BLINK_R = 100;                              // Sukuna W teleport distance
+const BLAST_HALF = 75*Math.PI/180, BLAST_HALF_WIDE = 100*Math.PI/180, BLAST_REACH = 76, BLAST_LOCK = 62;   // Bakugo empowered auto: 90 degree cone, +20 reach
+const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 32;   // empowered Cleave auto: 200 degree cone
 function segIdx(z, x, y){ let a = Math.atan2(y-z.y, x-z.x); if (a<0) a += Math.PI*2; return Math.floor(a/(Math.PI*2)*SEG) % SEG; }
 function hitWall(z, x, y, dmg){
   const i = segIdx(z, x, y);
@@ -1467,10 +1468,10 @@ const SKILLS = {
         const c = Math.cos(a), s = Math.sin(a), ox = f.x + c*f.r, oy = f.y + s*f.r;   // from the front of the model
         const rh = rayObst(ox, oy, a, 460), len = rh ? rh.t : 460;   // terrain cuts the beam short
         if (rh) damageObst(rh.o, 10);
-        beams.push({x:ox, y:oy, a, len, w:26, t:0.25, color:'#ff3b3b'});
+        beams.push({x:ox, y:oy, a, len, w:32, t:0.25, color:'#ff3b3b'});
         const tg = foe(f);
         const px = tg.x-ox, py = tg.y-oy, along = px*c+py*s, off = Math.abs(-px*s+py*c);
-        if (tg.hp>0 && along>0 && along<len && off < 26+tg.r) hit(tg, 10, f, c*700, s*700);   // hard to land: rewarding
+        if (tg.hp>0 && along>0 && along<len && off < 32+tg.r) hit(tg, 10, f, c*700, s*700);   // hard to land: rewarding
         wallHit(f, a, 460, 2);
         { const ob = f.blueOrb; if (ob && bullets.includes(ob)){                    // Red through the flying Blue orb: Purple too
             const zx = ob.x-f.x, zy = ob.y-f.y, za = zx*c+zy*s, zo = Math.abs(-zx*s+zy*c);
@@ -1594,9 +1595,9 @@ const SKILLS = {
   jinwoo: {
     // Passive Monarch's Domain: aura fills the bar while an enemy is inside; at 20% two soldiers appear for free
     // Q: Ruler's Authority: soldiers dash to his 2 and 10 o'clock and block shots, -20% damage taken for 2s
-    q:{name:"Ruler's Authority", hud:'Authority', cd:14, est:0, chan:0.1, cast(f,a){ JW.q(f); }},
+    q:{name:"Kandiaru's Blessing", hud:'Kandiaru', cd:14, est:0, chan:0.1, cast(f,a){ JW.q(f); }},
     // W: Shadow Exchange: sinks into a shadow pool (untargetable 1.5s); soldiers dissipate, re-summon at him and dash at the enemy
-    w:{name:'Shadow Exchange', hud:'Exchange', cd:12, est:0, chan:0, cast(f,a){ JW.w(f); }},
+    w:{name:"Ruler's Authority", hud:'Authority', cd:12, est:0, chan:0, cast(f,a){ JW.w(f); }},
     // E: Dagger Rush: 2 charges; a hit marks the enemy for 3s, every soldier dashes at him and keeps attacking
     e:{name:'Dagger Rush', hud:'Dagger', cd:5, est:2, charges:2, chan:0.1, cast(f,a){ JW.dagger(f, a); }},
     // R: Arise: full bar. Last ability Q = Iron, W = Igris, E = Beru (default Iron), summoned at 12 o'clock
@@ -1943,7 +1944,7 @@ function blink(f, a, range){                       // teleport up to range along
   zones.push({kind:'blinkfx', x:ox, y:oy, x2:f.x, y2:f.y, r:f.r, t:0.25, tick:0, src:null, color:'#c0182c'});   // afterimage
   FX3.blink(f, ox, oy);
 }
-const AF_E_SPD = 380;                              // Air Force (E) flight speed: 320 -> 380
+const AF_E_SPD = 380, AF_E_SPD_G1 = 425;                              // Air Force (E) flight speed: 320 -> 380
 const AF_CHARGES = [0, 2, 3, 4, 6];               // Midoriya: Air Force charges by gear
 function maxCh(f, k){ const sk = SKILLS[f.id] && SKILLS[f.id][k]; return (f.id==='midoriya' && k==='e') ? AF_CHARGES[f.gear||1] : (sk && sk.charges) || 0; }
 function chg(f, k){                                // current charges of a charge skill
@@ -3266,7 +3267,7 @@ const FX3 = (() => {
     if (f.id === 'bakugo'){ const fa = f.aim; effectDir(emp ? 'palm_blast_big' : 'palm_blast', SX(f.x) + Math.cos(fa) * 9, SY(f.y) + Math.sin(fa) * 9 * TILT, 33, emp ? 2.1 : 1.7, Math.atan2(Math.sin(fa) * TILT, Math.cos(fa))); return; }
     if (f.id !== 'sukuna') return;
     const fa = f.aim;
-    if (cleave) smear(f, 'h', fa, 112 * D2R, -112 * D2R, {R: 64, w: 22, h: 30, tp: 0.3, lo: 0.75});
+    if (cleave) smear(f, 'h', fa, 112 * D2R, -112 * D2R, {R: 76, w: 22, h: 30, tp: 0.3, lo: 0.75});
     else if (combo === 1) smear(f, 'v', fa, 115 * D2R, -60 * D2R, {lean: -0.55});
     else if (combo === 2) smear(f, 'v', fa, 115 * D2R, -60 * D2R, {lean: 0.55});
     else { smear(f, 'h', fa, 5 * D2R, 100 * D2R, {R: 42, w: 12}); smear(f, 'h', fa, -5 * D2R, -100 * D2R, {R: 42, w: 12}); }
@@ -3530,7 +3531,7 @@ function spaceFloor(cx, cy, R, t, pal, swirl){
     for (const bm of beams) if (bm.color === '#ff3b3b'){               // RED: instant beam at hand height, fat then thinning, flickering
       const k = Math.max(0, bm.t / 0.25), c = Math.cos(bm.a), s = Math.sin(bm.a) * TILT, l = Math.hypot(c, s), bc = c / l, bs = s / l;
       const X = SX(bm.x), Y0 = SY(bm.y) - HAND_Z * 0.75, len = Math.hypot(bm.len * Math.cos(bm.a), bm.len * Math.sin(bm.a) * TILT) * CAM_Z;
-      const th = Math.max(1, Math.round(4 * k + 1)), nx = -bs, ny = bc, n = Math.ceil(len / 2);
+      const th = Math.max(1, Math.round(5 * k + 1)), nx = -bs, ny = bc, n = Math.ceil(len / 2);
       for (let i = 0; i <= n; i++){
         const x = X + bc * i * 2, y = Y0 + bs * i * 2, w = th + ((i + Math.floor(T * 40)) % 5 === 0 ? 1 : 0);
         for (let j = -w; j <= w; j++) px(x + nx * j * 2, y + ny * j * 2, Math.abs(j) <= w * 0.35 ? '#fff4f0' : Math.abs(j) <= w * 0.7 ? '#ff4a3a' : '#a3101e');
@@ -4982,60 +4983,60 @@ const VFX = (() => {
 // ---------- fighter info shown in the CHARACTERS viewer: [what it does (numbers match the game code), lore] ----------
 const INFO = {
   gojo: {
-    p: ["RED + BLUE = PURPLE", "Fire Red through your Blue and the two collide into Hollow Purple, a massive explosion.", "Take the amplified and the reversal, then smash together those two different expressions of infinity to create and push out imaginary mass. Imaginary Technique: Purple."],
-    q: ["Launch an orb that sucks in anything within range. Press Q again to stop its travel and growth. It becomes a black hole that slows, damages and stuns.", "Cursed Technique Lapse: Blue, the standard application of the Limitless technique. Pulls everything toward a single point."],
-    w: ["Charge and fire a beam that deals damage and heavy knockback.", "Cursed Technique Reversal: Red, the inverted application of the Limitless technique. Pushes everything away."],
-    e: ["Summon a barrier of Infinity. Projectiles stop at its edge and nobody can walk in. Enemies inside are slowed.", "Infinity: an endless gap between Gojo and anything that tried to reach him."],
-    r: ["After Q or W: Hollow Purple, a piercing orb that pulls enemies in and knocks them back. Otherwise: Domain Expansion, Infinite Void, which stuns everyone inside.", "Hollow Purple erases whatever it touches. Infinite Void floods the mind with endless information."]
+    p: ["RED + BLUE = PURPLE", "Fire Red through Blue and the collision erupts as Hollow Purple, a blast that erases all.", "Take the amplified and the reversal, then smash together those two different expressions of infinity to create and push out imaginary mass. Imaginary Technique: Purple."],
+    q: ["Unleash an orb that devours everything near it. Reactivate to halt its growth, and it collapses into a black hole that crushes, slows and stuns.", "Cursed Technique Lapse. The standard application of the Limitless technique, pulling everything toward a single point."],
+    w: ["Charge and unleash a beam of destruction that obliterates enemies and hurls them back.", "Cursed Technique Reversal. The inverted application of the Limitless technique, pushing everything away."],
+    e: ["Become intangible. Projectiles and enemies alike freeze if they try to get too close.", "The space between Gojo and the world, divided endlessly so nothing can ever reach him."],
+    r: ["Blast enemies with Hollow Purple, a piercing orb that drags them in and deletes them from existence, or expand the Infinite Void domain and paralyze everyone trapped within.", "Imaginary mass that erases whatever it touches, and a domain that floods the mind with endless information."]
   },
   sukuna: {
     p: ["NO PASSIVE", "No passive.", "Ryomen Sukuna, the King of Curses. A thousand-year-old sorcerer who rules by fear."],
-    q: ["Carve the air with unseen cuts, up to three in a row. The first marks the target, the second is a flurry of slashes, the third is a heavy cut that sends them flying.", "Dismantle: invisible slashes that cut through almost anything."],
-    w: ["Blink forward in an instant. Your next auto becomes a wide Cleave with bonus damage.", "Cleave: a slash that adjusts its power to the target it cuts."],
-    e: ["Loose a trio of slow, homing flames. Sidestep at the last moment to escape them.", "Divine Flames: Fuga, the Fire Arrow, a burning bow-shot of cursed flame."],
-    r: ["Raise a walled shrine around you. Anyone trapped inside is shredded without end until the walls are broken.", "Domain Expansion: Malevolent Shrine. Slashes land without end."]
+    q: ["Unleash a storm of deadly slashes, each crueler than the last.", "Blades of cursed energy that carve through nearly anything."],
+    w: ["Blink forward in a flash. Your next strike becomes a wide, brutal Cleave.", "A single stroke from the King of Curses that leaves nothing standing."],
+    e: ["Unleash Divine Flames that hunt their prey through the dark. Slip away at the last moment, or burn.", "Fuga, the Fire Arrow, a bolt of cursed flame that reduces its target to ash."],
+    r: ["Raise a shrine of death around you. Those trapped within are carved apart without mercy until its walls fall.", "Domain Expansion. The King of Curses' domain, where every slash lands and none can escape."]
   },
   bakugo: {
     p: ["NO PASSIVE", "No passive.", "Katsuki Bakugo, the hero Dynamight. Loud, proud, and never second place."],
-    q: ["Blast a cone of light and sound in front of you. Enemies who were facing you are stunned.", "Stun Grenade: a blinding flash and bang straight to the face."],
-    w: ["Fire a fast, armor-piercing shot that slows the target and makes them take extra damage.", "AP Shot: a concentrated, armor-piercing blast fired from his gauntlet."],
-    e: ["Explode forward in a quick dash with your next auto ready at once. That auto hits harder and stuns.", "X Catapult: he launches himself forward on his own explosions."],
-    r: ["Spin up a tornado that shields you from damage, then click to launch yourself at a target. The longer you charge, the harder the crash. Launch early for a faster flight.", "Howitzer Impact: a spinning explosion that crashes down like a meteor."]
+    q: ["Blast a cone of light and sound in front of you. Enemies who were facing you are stunned.", "A blinding flash and bang straight to the face."],
+    w: ["Fire a fast, armor-piercing shot that slows the target and makes them take extra damage.", "A concentrated, armor-piercing blast fired from his gauntlet."],
+    e: ["Explode forward in a quick dash with your next auto ready at once. That auto hits harder and stuns.", "He launches himself forward on his own explosions."],
+    r: ["Whip up a tornado of explosions that shields you, then click to hurl yourself at a target. Charge longer for a harder crash, or launch early for a faster flight.", "A spinning explosion that crashes down like a meteor."]
   },
   midoriya: {
-    p: ["SHOOT STYLE", "Autos come in pairs. Landing both knocks the enemy back. Air Force hits build Gear Changes: press R when it flashes to shift up a gear.", "Izuku Midoriya, the hero Deku. He fights with kicks to spare his arms."],
-    q: ["Lash out with Black Whip in a full circle. Anyone caught is tethered, stunned and silenced, then slowed and left vulnerable. Press Q again to pull yourself in.", "Black Whip: dark tendrils that burst out of his body."],
-    w: ["Fill the area with smoke. The enemy loses sight of you, and you take less damage while inside.", "Smokescreen: a cloud of smoke to vanish into."],
-    e: ["Flick a slow, heavy blast of air that deals damage and knockback. Landing hits builds toward Gear Up.", "Delaware Smash Air Force: a finger flick that fires a blast of compressed air."],
-    r: ["Requires a full ultimate. Unleash One For All: your autos fire bursts of air in homing volleys, with bonus damage and speed.", "One For All: the power of every past holder, unleashed at full strength."]
+    p: ["SHOOT STYLE", "Strikes come in pairs, and landing both sends the enemy flying. Air Force hits push his power higher: press R when it flashes to shift up a gear.", "Izuku Midoriya, the hero Deku. Heir to the strongest power, he fights with his legs so his arms don't break."],
+    q: ["Lash out with Black Whip in a full circle. Anyone caught is tethered, stunned and silenced, then slowed and left vulnerable. Press Q again to pull yourself in.", "Dark tendrils that burst from his body and bind whoever they catch."],
+    w: ["Fill the area with smoke. The enemy loses sight of you, and you take less damage while inside.", "A veil of smoke, and no one sees the hero's next move."],
+    e: ["Flick a slow, heavy blast of air that deals damage and knockback. Landing hits builds toward Gear Up.", "Delaware Smash. One flick of the finger fires a shockwave of compressed air."],
+    r: ["With a full ultimate, unleash One For All. Your strikes become homing volleys of air, faster and far deadlier.", "The power of every past holder, unleashed at full strength."]
   },
   todoroki: {
     p: ["PHOSPHOR", "Fire heats you up and ice cools you down. Hold a balanced temperature to enter Phosphor and gain bonus damage and speed. Run too cold and you slow down, too hot and you burn.", "Shoto Todoroki, who wields his mother's ice and his father's fire."],
-    q: ["Channel a line of ice that stuns, slows and leaves a wall behind. Cools you down.", "Heaven-Piercing Ice Wall: a wall of ice that rises to meet the sky."],
-    w: ["Channel five jagged lines of fire that burn. Enough on one target and they are stunned. Heats you up.", "Hell Spider: fire that crawls outward in every direction."],
-    e: ["Hurl a vortex of your last element that traps the target in a stunning cocoon. The next hit breaks it, and hits harder if it matches the element.", "Flame Vortex and Ice Tomb: fire or ice wrapped around the target."],
-    r: ["Channel a cone of freezing air that slows through walls, then ignites in a blast that knocks up and burns.", "Flashfreeze Heatwave: freeze the air, then set it off in one blast."]
+    q: ["Channel a line of ice that stuns, slows and leaves a wall behind. Cools you down.", "A wall of ice that rises to meet the sky."],
+    w: ["Send jagged tendrils of flame snaking toward the enemy. Enemies caught in more than two tendrils are stunned where they stand.", "A web of flame spreading in every direction."],
+    e: ["Hurl a vortex of your last element that traps the target in a stunning cocoon. The next hit breaks it, and hits harder if it matches the element.", "Fire or ice closing around the prey like a cage."],
+    r: ["Channel a cone of freezing air that slows through walls, then ignites in a blast that knocks up and burns.", "Freeze the air, then ignite it in one devastating blast."]
   },
   tanjiro: {
-    p: ["OPENING THREAD", "Land hits in a row to mark the enemy. Your next auto deals bonus damage and stuns.", "Tanjiro Kamado, a Demon Slayer whose sense of smell finds the Opening Thread in every fight."],
-    q: ["Flip forward untouchable, then slash all around you, knocking enemies up.", "Water Breathing, Second Form: Waterwheel. A flip that carries a spinning slash."],
-    w: ["Spin up a whirlpool for extra speed and a chance to negate projectile damage. Anyone you touch is knocked up. Using another ability ends it.", "Water Breathing, Sixth Form: Whirlpool. A spinning wall of water around the blade."],
-    e: ["Dash through with a wide slash. On a knocked-up enemy it locks on and cannot miss.", "Water Breathing, Tenth Form: Constant Flux. Blades that never stop flowing."],
-    r: ["Ignite Hinokami Kagura: stronger hits, burning blades, faster movement and autos that knock up. It lasts while Flux keeps landing. Press R again to end it and reset your abilities.", "Hinokami Kagura: Dance of the Fire God, the Sun Breathing handed down in the Kamado family."]
+    p: ["OPENING THREAD", "Land hits in a row to mark the enemy. Your next auto deals bonus damage and stuns.", "Tanjiro Kamado, the Demon Slayer whose keen nose finds the Opening Thread in every fight."],
+    q: ["Vault forward untouchable, then spin a slash around you that launches enemies skyward.", "Water Breathing, Second Form. A wheel of water spinning through the air, cutting all it meets."],
+    w: ["Spin up a whirlpool for extra speed and a chance to negate projectile damage. Anyone you touch is knocked up. Using another ability ends it.", "Water Breathing, Sixth Form. A raging vortex that drags the world into its spin."],
+    e: ["Dash through with a wide slash. On a knocked-up enemy it locks on and cannot miss.", "Water Breathing, Tenth Form. An endless current of blades, each strike flowing into the next."],
+    r: ["Ignite Hinokami Kagura. Blades burn, steps quicken, and every strike launches enemies skyward. It lasts while Constant Flux keeps landing. Press R again to end it and reset your abilities.", "Dance of the Fire God, the Sun Breathing handed down in the Kamado family."]
   },
   zenitsu: {
     p: ["PARALYSIS", "Every hit briefly paralyzes. At half health he falls asleep for good, and his speed can no longer be reduced.", "Zenitsu Agatsuma, a Demon Slayer who is terrified awake and deadly asleep."],
-    q: ["Hold to charge, release to dash through enemies. Perfect for running away. Your charges refill over time, and faster once he falls asleep.", "Thunder Breathing, First Form: Thunderclap and Flash. A lightning-fast draw and dash."],
-    w: ["Spend charges on an instant, unstoppable dash that hits hard and stuns.", "Thunderclap and Flash: Godspeed. The same step at a speed the eye cannot follow."],
-    e: ["Spend charges to slash a giant triangle in front of you. The edges cut, and anyone caught inside is stunned when it closes. Press E again for a free second pass.", "Thunderclap and Flash: Sixfold, or Rokuren. Six strikes in a single breath."],
-    r: ["Charge up, then rocket forward as a dragon of lightning. An unstoppable dash that burns and briefly stuns the first enemy hit.", "Thunder Breathing, Seventh Form: Flaming Thunder God. A dragon of lightning, created by Zenitsu himself."]
+    q: ["Hold to gather lightning, release to streak through enemies. Perfect for running away. Charges return over time, and faster once he sleeps.", "Thunder Breathing, First Form. A lightning-fast draw and dash."],
+    w: ["Burn through the air at godspeed, a lightning step no one can stop. Whatever it strikes is left stunned.", "Thunderclap and Flash. A step so fast that the thunder arrives after the strike."],
+    e: ["Spend charges to slash a vast triangle of lightning before you. Its edges cut, and anyone caught inside is stunned when it closes. Press E again for a free second pass.", "Thunderclap and Flash: Sixfold. Six strikes in a single breath."],
+    r: ["Charge up, then rocket forward as a dragon of lightning. An unstoppable dash that burns and briefly stuns the first enemy hit.", "Thunder Breathing, Seventh Form. A dragon of lightning, created by Zenitsu himself."]
   },
   jinwoo: {
-    p: ["MONARCH'S DOMAIN", "A huge aura fills the Shadow bar while an enemy stands inside it. At 20% two Shadow Soldiers rise for free. A fallen soldier returns after 10s.", "Sung Jin-Woo, the Shadow Monarch. The weakest hunter, now a ruler with an undead army at his back."],
-    q: ["A 2s barrier: take 20% less damage. Your soldiers step to your sides and block projectiles.", "Ruler's Authority: an invisible force that holds everything around him."],
-    w: ["Sink into a shadow and cannot be targeted for 1.5s. Soldiers heal 30%, appear beside you and dash at the enemy.", "Shadow Exchange: he trades places with his shadow soldiers."],
-    e: ["Throw a dagger (2 charges). A hit marks the enemy for 3s: soldiers hop in and keep attacking until the mark ends.", "Dagger Rush: the Knight Killer daggers, thrown on instinct."],
-    r: ["Needs a full Shadow bar. Arise a shadow by your last ability: Q Iron, W Igris, E Beru (Iron by default). Regular soldiers dissipate.", "Arise: the Shadow Monarch calls the dead back to serve."]
+    p: ["MONARCH'S DOMAIN", "Drain shadow energy from all who dare enter his domain. Soldiers rise from the dark to serve him, and the fallen may rise again.", "Once the weakest hunter, now the ruler of shadows."],
+    q: ["Darkness cloaks the Monarch and dulls the damage he takes. His soldiers rally to his aid.", "Bestowed by the Architect, a blessing that no blade can pierce."],
+    w: ["Sink into the shadows and summon every soldier to his side. Then the shadows strike as one.", "The Ruler speaks, and the shadows obey."],
+    e: ["Hurl daggers that brand their victims enemies of the shadows. The army descends on the mark and hunts until it fades.", "Once the knife of their lord draws blood, the shadows begin their hunt."],
+    r: ["Consume all shadow energy and raise a champion from the shadows: the unbreakable shield, the loyal knight, or the bloodthirsty monster.", "One word, and the fallen kneel."]
   }
 };
 
