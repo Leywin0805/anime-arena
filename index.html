@@ -2309,6 +2309,7 @@ function styleOf(f, o){                           // ranged vs Zenitsu: stay out
   return st;
 }
 function styleOf0(f, o){                            // Bakugo: keeps distance unless bursting
+  if (f.id==='jinwoo') return JW.style(f, o);
   if (f.id==='sukuna') return f.mph==='bait' ? {range:240, strafe:160} : {range:55, strafe:60};   // bait: hover just outside their range, weaving
   if (f.id==='zenitsu' && (o.id==='sukuna' || o.id==='tanjiro')) return {range:300, strafe:140};   // vs divers: stay out of reach between dives
   if (f.id==='todoroki') return diver(o) ? {range:360, strafe:150} : f.phosT>0 ? {range:170, strafe:90} : {range:200, strafe:120};   // vs Sukuna: far away, step in only to auto a slowed / stunned target   // build at range, push in with Phosphor
@@ -3980,7 +3981,7 @@ const ZN = (() => {
 // E Dagger Rush (mark: soldiers dash + chase) | R Arise (Q=Iron, W=Igris, E=Beru at 12 o'clock) ----------
 const JW = (() => {
   const AURA_R = 230, AURA_FILL = 10, SUMMON_AT = 20, SPECIAL_LIFE = 15, LOCK = 10, MARK_T = 3, MARK_HOP = 150, BAR_T = 2, W_T = 1.5;
-  const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 40, iron: 54, igris: 47, beru: 27}, DODGE_CD = 10, HEAL_W = 0.3;
+  const PUR = ['#f6eeff', '#d8b4ff', '#9b5cff', '#5b2ab8', '#2a1060'], sol = [], slashes = [], craters = [], HPMAX = {shadow: 27, iron: 54, igris: 47, beru: 27}, DODGE_CD = 10, HEAL_W = 0.3;
   const has = typeof document !== 'undefined' && !!document.createElement;
   let T = 0;
   function at(wx, wy, fn){ ctx.save(); ctx.translate(wx, wy); ctx.scale(1 / CAM_Z, 1 / (CAM_Z * TILT)); ctx.imageSmoothingEnabled = false; fn(); ctx.restore(); }
@@ -4250,11 +4251,22 @@ const JW = (() => {
   function top(){
     for (const f of [player, enemy]) if (f.jwMark > 0 && f.hp > 0) at(f.x, f.y, () => { ctx.fillStyle = '#c9a0ff'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText('◆', 0, -62 - 4 * Math.sin(T * 8)); });
   }
-  function bot(f, o, dist, ea){               // simple bot: Arise when full, dagger poke, Q when close, W when hurt
-    if (f.ult >= 100 && dist < 320 && castSkill(f, 'r', ea)) return;
-    if (f.hp < f.max * 0.45 && dist < 280 && castSkill(f, 'w', ea)) return;
-    if (dist < 480 && chg(f, 'e') > 0 && castSkill(f, 'e', ea)) return;
-    if (dist < 300 && castSkill(f, 'q', ea)) return;
+  function style(f, o){                      // Jin-Woo wants mid range inside his aura to farm the bar, then backs off and lets the shadows work
+    const n = mine(f).length;
+    if (f.hp < f.max * 0.45) return {range: 340, strafe: 150};
+    return n >= 2 ? {range: 300, strafe: 140} : {range: 195, strafe: 110};
+  }
+  function pickArise(o){                      // melee divers get the Igris guard, ranged enemies get Beru; Iron when he is hurt
+    const melee = (STYLE[o.id] || {range: 55}).range < 150;
+    return melee ? 'w' : 'e';
+  }
+  function bot(f, o, dist, ea){
+    const n = mine(f).length, danger = dist < 120 || (f.hp < f.max * 0.5 && dist < 230);
+    if (f.ult >= 100 && dist < 460){ f.last = f.hp < f.max * 0.4 ? 'q' : pickArise(o); if (castSkill(f, 'r', ea)) return; }   // shadows up as fast as possible
+    if (danger && castSkill(f, 'w', ea)) return;                                                                          // escape: untargetable, soldiers heal and dash in
+    if (dist < 130 && f.dashCd <= 0 && f.stun <= 0 && f.root <= 0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = -Math.cos(ea) * 620; f.vy = -Math.sin(ea) * 620; return; }   // dash away to keep mid range
+    if (n > 0 && dist < 280 && castSkill(f, 'q', ea)) return;                                                             // barrier + formation when pressed
+    if (dist < 480 && chg(f, 'e') > 0 && castSkill(f, 'e', ea)) return;                                                   // dagger mark: soldiers pile on
   }
   // ---- retargeting: an enemy's foe(f) can be a shadow instead of Jin-Woo, so EVERY skill's own geometry hits shadows (hit() on a proxy lands in hurtSol) ----
   const angd = (a, b) => { let d = Math.abs(a - b) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
@@ -4262,19 +4274,33 @@ const JW = (() => {
     const p = s.px || (s.px = Object.create(s.f)); p.__sh = s; p.x = s.x; p.y = s.y; p.vx = p.vy = 0; p.hp = Math.max(0.01, s.hp); p.max = s.max; p.r = 20; p.w = 40; p.h = 40; p.inv = s.dis ? 9 : 0;
     p.stun = p.root = p.slowT = p.vulnT = p.tetherT = p.wpT = p.infT = p.drT = 0; p.cocoon = null; p.tether = null; p.kx = p.ky = 0; p.ult = 0; return p;
   }
+  function botPick(f, jw, alive){             // who a bot goes after: Beru first, divers clear Igris, slow champs kill Iron, fast ones ignore Iron, anyone pokes shadows when Jin-Woo is not pressing
+    const near = list => { let b = null, bd = 1e9; for (const s of list){ const d = Math.hypot(s.x - f.x, s.y - f.y); if (d < bd){ bd = d; b = s; } } return b; };
+    const by = id => alive.filter(s => s.id === id);
+    const melee = (STYLE[f.id] || {range: 55}).range < 150, spd = (typeof ROSTER !== 'undefined' && ROSTER[f.id] ? ROSTER[f.id].spd : 190), slow = spd <= 185;
+    let pk = null;
+    if (by('beru').length) pk = near(by('beru'));
+    else if (melee && by('igris').length) pk = near(by('igris'));
+    else if (slow && by('iron').length) pk = near(by('iron'));
+    else if (Math.hypot(jw.x - f.x, jw.y - f.y) > 230){ const reg = by('shadow').filter(s => Math.hypot(s.x - f.x, s.y - f.y) < 330); if (reg.length) pk = near(reg); }
+    const prev = f.jwPick;                                                                                         // stick to a target for a moment so the bot does not jitter
+    if (prev && pk && prev !== pk && pk.id !== 'beru' && !prev.dis && !prev.dead && alive.includes(prev) && T < (f.jwPickT || 0)) return prev;
+    if (pk !== prev){ f.jwPick = pk; f.jwPickT = T + 0.8; }
+    return pk;
+  }
   function target(f, jw){
     if (jw.hp <= 0) return jw;
     const alive = mine(jw).filter(s => !(s.anim && s.anim.name === 'summon'));
     if (!alive.length) return jw;
     let best = null, bs = 1e9;
-    if (botControlled(f)){ if (jw.hp < jw.max * 0.25) return jw; for (const s of alive){ const d = Math.hypot(s.x - f.x, s.y - f.y); if (d < 320 && d < bs){ bs = d; best = s; } } return best ? proxyOf(best) : jw; }
+    if (botControlled(f)){ if (jw.hp < jw.max * 0.25) return jw; const pk = botPick(f, jw, alive); return pk ? proxyOf(pk) : jw; }
     const sc = (x, y, r) => { const d = Math.hypot(x - f.x, y - f.y) || 1; return Math.max(0, angd(f.aim, Math.atan2(y - f.y, x - f.x)) - Math.atan2(r, d)) * 3 + d / 600; }, js = sc(jw.x, jw.y, jw.r || 20);       // aim error minus the body's angular size; ties go to the closer one
     for (const s of alive){ if (angd(f.aim, Math.atan2(s.y - f.y, s.x - f.x)) > 0.6 + Math.atan2(20, Math.hypot(s.x - f.x, s.y - f.y) || 1)) continue; const v = sc(s.x, s.y, 20); if (v < js && v < bs){ bs = v; best = s; } }
     return best ? proxyOf(best) : jw;
   }
   function hurtProxy(p, dmg, src, kx, ky){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); if (kx || ky){ s.kvx = (s.kvx || 0) + kx; s.kvy = (s.kvy || 0) + ky; } }
   function reset(){ sol.length = 0; slashes.length = 0; craters.length = 0; }
-  return {sol, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, target, hurtProxy, reset, mark, AURA_R};
+  return {sol, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
 })();
 
 JW_T = JW.target;
