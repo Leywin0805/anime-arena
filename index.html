@@ -2896,6 +2896,8 @@ function drawFighter(f){
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   if (SPR3D[f.id]){ ctx.beginPath(); ctx.ellipse(0, 0, 13/CAM_Z, 4.4/CAM_Z, 0, 0, 7); ctx.fill(); }   // shadow right under the feet
   else { ctx.beginPath(); ctx.ellipse(0, f.r*0.8, f.r, f.r*0.4, 0, 0, 7); ctx.fill(); }
+  if (player.id===enemy.id){ const k3 = SPR3D[f.id] ? 1/CAM_Z : 1, ry = SPR3D[f.id] ? 0 : f.r*0.8, ga = ctx.globalAlpha;   // team ring under the feet, mirror matches only: blue = you, red = enemy
+    ctx.globalAlpha = ga*0.5; ctx.strokeStyle = f.team==='p' ? '#3da5ff' : '#ff4040'; ctx.lineWidth = 1.5*k3; ctx.beginPath(); ctx.ellipse(0, ry, (SPR3D[f.id] ? 17 : f.r+2)*k3, (SPR3D[f.id] ? 6 : (f.r+2)*0.4)*k3, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }
   const img = sprites[f.id], is3d = SPR3D[f.id] && draw3d(f);
   if (is3d){ if (f.hp<=0){ ctx.restore(); return; } }
   else if (img){ ctx.drawImage(img, -32, -32, 64, 64); }
@@ -4158,6 +4160,7 @@ const JW = (() => {
     if (s.lunge > 0){ const k = Math.sin(s.lunge / 0.2 * Math.PI) * 10; ox = Math.cos(s.la) * k; oy = Math.sin(s.la) * k; }
     at(s.x + ox, s.y + oy, () => {
       ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, 7); ctx.fill();
+      if (player.id === enemy.id){ const ga = ctx.globalAlpha; ctx.globalAlpha = ga * 0.5; ctx.strokeStyle = s.f.team === 'p' ? '#3da5ff' : '#ff4040'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, 15, 5.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }   // team ring on soldiers too (mirror matches)
       if (s.id === 'beru' && s.wing > 0) drawWings(s);
       if (s.tpT >= 0 && s.tpTo) ctx.globalAlpha = 0.35;
       ctx.drawImage(A.img, fr * S.FW, row * S.FH, S.FW, S.FH, -S.FW / 2, -S.GY, S.FW, S.FH);
