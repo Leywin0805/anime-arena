@@ -4084,19 +4084,19 @@ const JW = (() => {
         const a2 = ang(s, tg); FX3.smear(s, 'h', a2, 112 * Math.PI / 180, -112 * Math.PI / 180, {R: 84, w: 24, h: 30, tp: 0.3, lo: 0.75, cols: PUR});
         { const pts = []; for (let k = 0; k <= 14; k++){ const th = a2 - Math.PI / 2 + Math.PI * k / 14; pts.push([s.x + Math.cos(th) * 105, s.y + Math.sin(th) * 105]); } FX3.cutPoly(pts, 2.2, 1.6, 0.9); }   // the 180 degree cut scars the ground
         let da = Math.abs(Math.atan2(tg.y - s.y, tg.x - s.x) - a2); if (da > Math.PI) da = 2 * Math.PI - da;
-        if (da < Math.PI / 2){ const before = tg.hp; hit(tg, 3 * SOL_UP, f); s.dealt += Math.max(0, before - tg.hp); }
+        if (da < Math.PI / 2){ const before = tg.hp; hit(tg, 1.5 * SOL_UP, f); s.dealt += Math.max(0, before - tg.hp); }
       });
     }
     else if (s.id === 'iron' && d < 90 + tg.r){
       s.atk = 3; strike(6 / 14, 14, () => {
         const a2 = ang(s, tg), cx = s.x + Math.cos(a2) * 62, cy = s.y + Math.sin(a2) * 62;
         for (let k = 0; k < 7; k++){ const th = k * 0.9 + Math.random() * 0.4, l1 = 34 + Math.random() * 24, l2 = l1 + 22 + Math.random() * 26, w1 = th + (Math.random() - 0.5) * 0.5; FX3.cutPoly([[cx + Math.cos(th) * 8, cy + Math.sin(th) * 8], [cx + Math.cos(th) * l1, cy + Math.sin(th) * l1], [cx + Math.cos(w1) * l2, cy + Math.sin(w1) * l2]], 2.6, 3.2, 1.2); }   // the smash cracks and gouges the ground like Sukuna's cuts
-        if (Math.hypot(tg.x - s.x, tg.y - s.y) < 95 + tg.r){ hit(tg, 0.25 * SOL_UP, f); if (tg.inv <= 0 && tg.hp > 0){ tg.stun = Math.max(tg.stun, 1); fx.push({x: tg.x, y: tg.y - tg.r - 14, t: 0.7, txt: 'SLAMMED'}); } }
+        if (Math.hypot(tg.x - s.x, tg.y - s.y) < 95 + tg.r){ hit(tg, 0.125 * SOL_UP, f); if (tg.inv <= 0 && tg.hp > 0){ tg.stun = Math.max(tg.stun, 1); fx.push({x: tg.x, y: tg.y - tg.r - 14, t: 0.7, txt: 'SLAMMED'}); } }
       });
     }
     else if (s.id === 'beru' && d < 68 + tg.r){
       s.atk = 1; strike(2 / 14, 14, () => {
-        const a2 = ang(s, tg); FX3.smear(s, 'v', a2, 115 * Math.PI / 180, -60 * Math.PI / 180, {R: 66, w: 18, lean: (s.slashN = (s.slashN || 0) + 1) % 2 ? -0.55 : 0.55, cols: PUR}); hit(tg, AUTO_DMG * 0.5 * SOL_UP, f);
+        const a2 = ang(s, tg); FX3.smear(s, 'v', a2, 115 * Math.PI / 180, -60 * Math.PI / 180, {R: 66, w: 18, lean: (s.slashN = (s.slashN || 0) + 1) % 2 ? -0.55 : 0.55, cols: PUR}); hit(tg, AUTO_DMG * 0.25 * SOL_UP, f);
         s.tpT = 0.2; s.tpTo = tpSpot(tg);          // after a slash: teleport to a random spot on a big ring around the enemy
       });
     }
