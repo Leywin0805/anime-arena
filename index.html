@@ -1207,8 +1207,8 @@ const INF_R = 130, timers = [], DOMAIN_R = 230;   // both domain ults share one 
 const MELEE_R = 45, MELEE_CD = 1.5, AUTO_DMG = 3.4, AUTO_HALF = 75*Math.PI/180;   // auto: 150 degree cone, short reach
 const MIDO_AUTO = 3.0, MIDO_CHAIN = 0.5;          // Midoriya: 2 autos per reset, 2nd within 0.5s
 // ---------- TODOROKI: half fire, half ice ----------
-const TODO_AUTO = 2.2, TODO_AUTO_CD = 2.0, BURN_T = 2, BURN_TICK = 0.12, ICE_T = 1;   // fire burns 2s (tiny chip), ice slows 10% for 1s
-const VORTEX_R = 90, VORTEX_HALF = 8*Math.PI/180;   // Vortex: 90px reach, 16 degree cone
+const TODO_AUTO = 3, TODO_AUTO_CD = 2.0, BURN_T = 2, BURN_TICK = 0.25, ICE_T = 1;   // fire burns 2s (tiny chip), ice slows 10% for 1s
+const VORTEX_R = 130, VORTEX_HALF = Math.PI/4;   // Vortex: 130px reach, 90 degree cone (fire and ice the same)
 const SPIDER_STEP = 25*Math.PI/180, SPIDER_WANDER = 10*Math.PI/180;   // lanes 25 degrees apart, each wanders at most 10 degrees: no criss-crossing              // Hell Spider: 5 lines 25 degrees apart = 100 degree cone (gaps to step into)
 const HEAT = {auto:3, q:10, w:12, e:6};           // how far each attack moves the temperature
 const TEMP_DRIFT = 8.2;                            // fast enough that drifting through the whole -20..20 band takes < 5s: idling never procs Phosphor
@@ -1275,7 +1275,7 @@ function growIce(z, dt){                           // advance the ice front: sma
 }
 function vortex(f, a){                             // E: short, very narrow cone of the last element used; a hit cocoons them for 2s
   const elem = f.lastElem || 'fire', fire = elem==='fire';
-  const half = fire ? Math.PI/4 : VORTEX_HALF, R = fire ? 130 : VORTEX_R;   // fire: same cone as Bakugo's Grenade (130px, 90 degrees)
+  const half = VORTEX_HALF, R = VORTEX_R;   // fire: same cone as Bakugo's Grenade (130px, 90 degrees)
   arcs.push({x:f.x, y:f.y, off:f.r, a, r:R, t:0.25, h:half, c: elem==='fire' ? '#ff7a2a' : '#9fe8ff'});
   heat(f, elem, HEAT.e);
   const tg = foe(f), d = Math.hypot(tg.x-f.x, tg.y-f.y);
@@ -1446,8 +1446,8 @@ const ZR_LEN = 600, ZR_SPD = 1800, ZR_DMG = 20, ZR_STUN = 0.6, ZR_PAST = 150;   
 // ---------- TANJIRO NUMBERS ----------
 const KU_T = 1.0, THREAD_T = 3, THREAD_MULT = 1.5, THREAD_STUN = 0.3;          // knock-up length; Opening Thread
 const WW_FLIP = 110, WW_FLIP_T = 0.3, WW_R = 75, WW_HALF = 60*Math.PI/180, WW_DMG = 5.5;   // Waterwheel
-const WP_T = 2, WP_DMG = 2.3, WP_BLOCK = 0.4, WP_SPD = 1.5;                    // Whirlpool
-const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 6.3, FLUX_LOCK = 320;   // Constant Flux
+const WP_T = 2, WP_DMG = 2.5, WP_BLOCK = 0.4, WP_SPD = 1.5;                    // Whirlpool
+const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 6, FLUX_LOCK = 320;   // Constant Flux
 const HINO_WIN = 3, HINO_DMG = 1.2, HINO_KU_CD = 4, HINO_SPD = 1.15;          // Hinokami Kagura
 const SKILLS = {
   gojo: {
@@ -1662,7 +1662,7 @@ const SKILLS = {
     q:{name:'Dismantle', cd:11, est:5+4*2+2.5*3, stages:3, window:2.0, gap:0.3, chan:0,   // instant
        label:f => f.qst>0 ? 'Q'+(f.qst+1) : 'Dismantle', cast(f,a,stage){
       if (stage===1) for (const o of [-0.524, 0, 0.524])
-        proj(f, a+o, {spd:650, r:6, dmg:2.5, life:0.5, line:true, wave:1, color:'#c9b8ff',
+        proj(f, a+o, {spd:650, r:6, dmg:3, life:0.5, line:true, wave:1, color:'#c9b8ff',
           onHit:tg => { tg.vulnT = Math.max(tg.vulnT, 3); }});
       else if (stage===2) for (const o of [-0.22, 0.22])
         proj(f, a+o, {spd:880, r:6, dmg:4, life:0.37, line:true, wave:2, color:'#dfe6ff'});
@@ -2657,7 +2657,7 @@ function update(dt){
     if (f.iceT>0) f.iceT -= dt;
     if (f.knockT>0) f.knockT -= dt;
     if (f.cocoon){ f.cocoon.t -= dt; f.cocoon.tick -= dt;               // cocoon: stunned, tiny chip
-      if (f.cocoon.tick<=0){ f.cocoon.tick = 0.25; HIT_TICK = true; hit(f, 0.1, f.cocoon.src); HIT_TICK = false; }
+      if (f.cocoon.tick<=0){ f.cocoon.tick = 0.25; HIT_TICK = true; hit(f, 0.125, f.cocoon.src); HIT_TICK = false; }
       if (f.cocoon && f.cocoon.t<=0) f.cocoon = null; }
     if (f.id==='todoroki'){                           // temperature never sits still; Phosphor for 5s in -20..20C
       if (f.temp > OVERHEAT_T){ f.burnT = BURN_T; f.burnSrc = null; f.overheat = true; f.shock = false; }   // overheating: burns himself; 2s countdown starts once back under 75C
@@ -2741,7 +2741,7 @@ function update(dt){
     }
     if (z.kind==='shrine'){
       const tg = foe(z.src), sx = tg.x-z.x, sy = tg.y-z.y, d = Math.hypot(sx,sy) || 1;
-      if (tg.hp>0 && d < z.r && z.tick<=0){ hit(tg, 1.1, z.src); z.tick = 0.25; }   // continuous damage
+      if (tg.hp>0 && d < z.r && z.tick<=0){ hit(tg, 1.25, z.src); z.tick = 0.25; }   // continuous damage
       if (z.trapped && tg.hp>0){                     // inside: unbroken segments hold, only a breach lets him out
         const lim = z.r - tg.r;
         if (d > lim){
