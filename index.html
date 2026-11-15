@@ -323,16 +323,17 @@ cv.addEventListener('mousedown', e => {
   demo = null;
   mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
   if (e.button === 2){ if (player.aimK){ player.aimK = null; return; }   // right click while aiming = cancel
-    player.focus = enemy.hp>0 && Math.hypot(mouse.x-enemy.x, mouse.y-enemy.y) < enemy.r+60;
+    player.focus = aaPick(player, mouse.x, mouse.y, 60);
     moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'}); }
   else mouse.down = true;
 });
 addEventListener('mouseup', e => { if (e.button === 0){ const was = mouse.down; mouse.down = false; if (was && !bots && !demo && !ended) aaRelease(); } });
 function aaRelease(){                                 // left click: hold shows the auto range, release attacks
-  const f = player; if (f.hp<=0 || f.howT>=0 || f.aimK || enemy.hp<=0) return;
-  const mx = mouse.sx/CAM_Z + camX, my = mouse.sy/(CAM_Z*TILT) + camY;
-  if (inAAR(f, enemy)){ f.aaQ = 0.4; f.focus = false; moveTarget = null; }                      // in range: stop and swing
-  else if (Math.hypot(mx-enemy.x, my-enemy.y) < enemy.r+60){ f.focus = true; f.aaQ = 0; }       // clicked him from afar: walk up, then swing
+  const f = player; if (f.hp<=0 || f.howT>=0 || f.aimK) return;
+  const mx = mouse.sx/CAM_Z + camX, my = mouse.sy/(CAM_Z*TILT) + camY, hit = aaPick(f, mx, my, 60), tg = hit || aaNearest(f);
+  if (!tg) return;
+  if (inAAR(f, tg)){ f.aaQ = 0.4; f.aaT = tg; f.focus = null; moveTarget = null; }          // in range: stop and swing
+  else if (hit){ f.focus = tg; f.aaQ = 0; }                                                   // clicked him from afar: walk up, then swing
 }
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -1231,9 +1232,10 @@ function heat(f, elem, amt){                       // fire raises the temperatur
 const TODO_CONE_R = 220, TODO_CONE_HALF = 15*Math.PI/180, TODO_CONE_SPD = 520;   // auto: long, narrow 30 degree cone that sweeps out at 520/s
 function todoBolt(f){                              // auto: a long 30 degree cone, alternating fire / ice
   const elem = f.aaNext==='ice' ? 'ice' : 'fire'; f.aaNext = elem==='fire' ? 'ice' : 'fire';
-  zones.push({kind:'todocone', ph:f.phosT>0, x:f.x, y:f.y, a:f.aim, r: elem==='fire' ? 160 : 175, half: (elem==='fire' ? 8 : 9)*Math.PI/180, front:f.r, t:9, tick:0, src:f, elem, done:false,
+  zones.push({kind:'todocone', ph:f.phosT>0, x:f.x, y:f.y, a:f.aim, r: elem==='fire' ? 160 : 175, half: (elem==='fire' ? 8 : 9)*Math.PI/180, front:f.r, t:9, tick:0, src:f, elem, done:false, tg:(AA_OV && AA_OV.f===f) ? AA_OV.t : null,
     color: elem==='fire' ? '#ff7a2a' : '#9fe8ff'});
   heat(f, elem, HEAT.auto);
+  if (AA_FORCE && AA_OV && AA_OV.f===f){ const zz = zones[zones.length-1], t0 = AA_OV.t; zz.done = true; HIT_ELEM = elem; hit(t0, TODO_AUTO, f); HIT_ELEM = null; applyElem(t0, elem, f); }   // an auto that lands always hits
   f.kx -= Math.cos(f.aim)*300; f.ky -= Math.sin(f.aim)*300;   // small hop backwards with every shot
 }
 function coneBlocked(z, tg){                       // terrain between the cone origin and him (his own ice walls don't count)
@@ -1242,7 +1244,7 @@ function coneBlocked(z, tg){                       // terrain between the cone o
 }
 function growCone(z, dt){                          // the auto cone sweeps outward at the old bolt speed: dodgeable
   z.front = Math.min(z.r, z.front + TODO_CONE_SPD*dt);
-  const tg = foe(z.src), d = Math.hypot(tg.x-z.x, tg.y-z.y);
+  const tg = z.tg ? (z.tg.__sh ? JW.proxyOf(z.tg.__sh) : z.tg) : foe(z.src), d = Math.hypot(tg.x-z.x, tg.y-z.y);
   if (!z.done && tg.hp>0 && d < z.front + tg.r && inCone(z, tg.x, tg.y, tg.r) && !coneBlocked(z, tg)){
     z.done = true; HIT_ELEM = z.elem; hit(tg, TODO_AUTO, z.src); HIT_ELEM = null; applyElem(tg, z.elem, z.src);
   }
@@ -1317,6 +1319,21 @@ const AA_WIND = 0.5, AA_RE = /^(auto|cleave)/;
 const aimA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a))*255).toString(16).padStart(2, '0');
 function aaReach(f){ return f.id==='todoroki' ? 170 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
 function inAAR(f, tg){ return !!tg && tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) <= aaReach(f) + tg.r; }
+function aaCands(f){                                // everything an auto can hit: the enemy and, for Jin-Woo, his shadows
+  const e = f===player ? enemy : player, out = [];
+  if (e.hp>0) out.push(e);
+  if (e.id==='jinwoo') for (const s of JW.sol){ if (s.f!==e || s.dis || s.dead || (s.anim && s.anim.name==='summon')) continue; out.push(JW.proxyOf(s)); }
+  return out;
+}
+function aaPick(f, mx, my, pad){ let b = null, bd = 1e9; for (const c of aaCands(f)){ const d = Math.hypot(mx-c.x, my-c.y); if (d < c.r+pad && d < bd){ bd = d; b = c; } } return b; }
+function aaNearest(f){ let b = null, bd = 1e9; for (const c of aaCands(f)){ const d = Math.hypot(c.x-f.x, c.y-f.y); if (inAAR(f, c) && d < bd){ bd = d; b = c; } } return b; }
+function aaLive(t){ if (!t) return null; if (t.__sh){ const s = t.__sh; if (s.dis || s.dead || s.hp<=0) return null; return JW.proxyOf(s); } return t.hp>0 ? t : null; }
+function aaDrive(f, dt, still){
+  let t = null;
+  if (f.aaQ>0){ f.aaQ -= dt; t = aaLive(f.aaT); if (!t) f.aaQ = 0; }
+  else if (still && f.focus){ t = aaLive(f.focus); if (!t) f.focus = null; }
+  if (t && startAA(f, t)) f.aaQ = 0;
+}
 function startAA(f, tg, free){                       // begin an auto attack: stand still for the windup, then it always lands
   tg = tg || foe(f);
   if (f.aaW || f.chan || f.fly || f.lunge || f.stun>0 || f.hp<=0 || f.atkCd>0 || f.howT>=0 || f.dashT>0) return false;
@@ -1330,14 +1347,15 @@ function startAA(f, tg, free){                       // begin an auto attack: st
 function doAuto(f){ startAA(f); }
 function resolveAA(f){
   const w = f.aaW; f.aaW = null; const tg = w.tgt;
-  if (tg){ if (tg.hp<=0 || f.stun>0) return; f.aim = Math.atan2(tg.y-f.y, tg.x-f.x); }
-  AA_FORCE = !!tg; AA_NOANIM = true;
-  try { doAutoNow(f); } finally { AA_FORCE = false; AA_NOANIM = false; }
+  if (tg){ if (tg.hp<=0 || f.stun>0 || (tg.__sh && (tg.__sh.dis || tg.__sh.dead))) return; if (tg.__sh) JW.proxyOf(tg.__sh); f.aim = Math.atan2(tg.y-f.y, tg.x-f.x); }
+  AA_FORCE = !!tg; AA_NOANIM = true; AA_OV = tg ? {f, t:tg} : null;
+  try { doAutoNow(f); } finally { AA_FORCE = false; AA_NOANIM = false; AA_OV = null; }
   f.atkCd = Math.max(0.1, f.atkCd - w.total);        // same total auto cycle as before
 }
 function tickAA(f, dt){
   const w = f.aaW; if (!w) return;
-  if (f.hp<=0 || f.stun>0 || f.chan || f.fly || f.lunge || f.dashT>0 || f.howT>=0 || (w.tgt && w.tgt.hp<=0)){   // stun / dash / cast cancels the windup
+  if (w.tgt && w.tgt.__sh && !w.tgt.__sh.dis && !w.tgt.__sh.dead) JW.proxyOf(w.tgt.__sh);
+  if (f.hp<=0 || f.stun>0 || f.chan || f.fly || f.lunge || f.dashT>0 || f.howT>=0 || (w.tgt && (w.tgt.hp<=0 || (w.tgt.__sh && (w.tgt.__sh.dis || w.tgt.__sh.dead))))){   // stun / dash / cast cancels the windup
     f.aaW = null; f.atkCd = Math.max(f.atkCd, 0.3);
     const x = f.a3; if (x && x.act && AA_RE.test(x.act.name)) x.act = null;
     return;
@@ -1505,7 +1523,7 @@ function drawAimLayer(){                            // auto attack ring + windup
     ctx.restore();
   }
   if (!bots && player.hp>0 && mouse.down && !player.aimK){
-    const R = aaReach(player) + enemy.r, hot = inAAR(player, enemy), col = hot ? '#ff6a6a' : '#ffffff';
+    const R = aaReach(player) + enemy.r, hot = aaCands(player).some(c => inAAR(player, c)), col = hot ? '#ff6a6a' : '#ffffff';
     ctx.save(); ctx.beginPath(); ctx.arc(player.x, player.y, R, 0, 7); ctx.fillStyle = aimA(col, hot ? .07 : .03); ctx.fill();
     ctx.setLineDash([14, 10]); ctx.lineDashOffset = -T*30; ctx.strokeStyle = aimA(col, hot ? .9 : .5); ctx.lineWidth = 2; ctx.shadowColor = col; ctx.shadowBlur = hot ? 14 : 6; ctx.stroke(); ctx.restore();
   }
@@ -1627,7 +1645,8 @@ function hit(f, dmg, src, kx, ky){
 
 // ---------- SKILLS (per character) ----------
 let JW_T = null;
-const foe = f => { const t = f.team==='p' ? enemy : player; return JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t; };   // Jin-Woo's shadows can be the target: all skill geometry hits them
+var AA_OV = null;
+const foe = f => { if (AA_OV && AA_OV.f===f) return AA_OV.t; const t = f.team==='p' ? enemy : player; return JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t; };   // Jin-Woo's shadows can be the target: all skill geometry hits them
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 100;                              // Sukuna W teleport distance
@@ -2828,7 +2847,7 @@ function update(dt){
   let dx = (keys[KB.right]?1:0) - (keys[KB.left]?1:0);
   let dy = (keys[KB.down]?1:0) - (keys[KB.up]?1:0);
   if (dx||dy){ moveTarget = null; player.focus = false; }   // arrow keys cancel click-move
-  if (!(dx||dy) && player.focus && enemy.hp>0) moveTarget = inAAR(player, enemy) ? null : {x:enemy.x, y:enemy.y};   // right-clicked the enemy: chase, then auto
+  if (!(dx||dy) && player.focus){ const ft = aaLive(player.focus); if (ft) moveTarget = inAAR(player, ft) ? null : {x:ft.x, y:ft.y}; else player.focus = null; }   // right-clicked a target: chase, then auto
   if (!(dx||dy) && moveTarget){
     const tx = moveTarget.x-player.x, ty = moveTarget.y-player.y, td = Math.hypot(tx,ty);
     if (td < 8) moveTarget = null; else { dx = tx/td; dy = ty/td; }
@@ -2845,7 +2864,7 @@ function update(dt){
   else { player.vx = dx*player.spd; player.vy = dy*player.spd; }
   aimInput(player);                                 // hold = indicator, release = cast
   if (player.howT>=0){ if (mouse.down){ mouse.down = false; howLaunch(player, mouse.x, mouse.y); } }
-  else if (((player.focus && !dx && !dy) || player.aaQ>0) && !player.aimK && player.hp>0 && !stunned && !player.fly){ if (player.aaQ>0) player.aaQ -= dt; if (startAA(player)) player.aaQ = 0; }
+  else if (!player.aimK && player.hp>0 && !stunned && !player.fly){ aaDrive(player, dt, !dx && !dy); }
   }
 
   if (training){
@@ -4521,7 +4540,7 @@ const JW = (() => {
   }
   function hurtProxy(p, dmg, src, kx, ky){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); if (kx || ky){ s.kvx = (s.kvx || 0) + kx; s.kvy = (s.kvy || 0) + ky; } }
   function reset(){ sol.length = 0; slashes.length = 0; craters.length = 0; }
-  return {sol, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
+  return {sol, proxyOf, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
 })();
 
 JW_T = JW.target;
