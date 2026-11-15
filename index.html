@@ -109,6 +109,34 @@
   #cur::before,#cur::after{content:'';position:absolute;background:#fff;box-shadow:0 0 0 1px #000}
   #cur::before{left:-10px;top:-1px;width:20px;height:2px}
   #cur::after{left:-1px;top:-10px;width:2px;height:20px}
+
+  #menu .bbar{position:absolute;left:22px;right:22px;bottom:16px;display:flex;align-items:flex-end;justify-content:space-between}
+  #menu .selw{display:flex;gap:14px;height:calc(100% - 140px);padding:0 22px}
+  #menu .selw .vwrap{flex:1;height:100%;padding:0;gap:6px;min-width:0}
+  #menu .selw .stage{width:270px}
+  #menu .selw canvas.vc{transform:scale(.75);transform-origin:50% 100%;pointer-events:none}
+  #menu .selw .vinfo{gap:8px}
+  #menu .selw .vname{font-size:20px}
+  #menu .selw .krow{padding:3px 8px;font-size:8px;gap:8px}
+  #menu .selw .kdesc{flex:1;min-height:0;overflow:auto;padding:7px 10px}
+  #menu .selw .kx{font-size:7px;line-height:1.7}
+  #menu .qm.big{font-size:120px;position:absolute;left:0;right:0;top:90px}
+  #menu .grid4{width:300px;flex:none;height:100%;display:grid;grid-template-columns:repeat(4,64px);grid-auto-rows:90px;gap:8px;align-content:start;overflow-y:auto;padding:4px 8px 10px 4px;scrollbar-width:thin;scrollbar-color:#5ff0ff #1a1050}
+  #menu .grid4::-webkit-scrollbar{width:8px} #menu .grid4::-webkit-scrollbar-track{background:#1a1050} #menu .grid4::-webkit-scrollbar-thumb{background:#5ff0ff}
+  #menu .gc{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;background:rgba(10,6,48,.85);border:3px solid #3a2c8a;cursor:pointer;box-shadow:0 1px 0 #0e0a3a,0 2px 0 #0e0a3a,0 3px 0 #0e0a3a,0 4px 0 #0e0a3a}
+  #menu .gc:hover{border-color:var(--c)} #menu .gc.sel{border-color:var(--c);background:rgba(40,24,110,.95);box-shadow:0 0 14px var(--c)}
+  #menu .gc canvas.pt{width:33px;height:54px} #menu .gc .cn{font-size:5px;line-height:1.3;text-align:center;color:var(--c);padding:0 2px;word-break:break-word}
+  #menu .gc .qm.sm{font-size:30px;margin-top:6px}
+  #menu .roomw{display:flex;justify-content:center;padding-top:50px} #menu .roomw .lobby{flex:none;width:460px;height:auto;padding:22px;gap:14px}
+  #menu .setup{display:flex;flex-direction:column;gap:10px;padding:0 22px;height:calc(100% - 140px)} #menu .setup label{font-size:8px;color:#ff8be8;margin-top:6px}
+  #menu .mu{display:flex;align-items:center;justify-content:center;gap:30px;margin:4px 0 8px}
+  #menu .mus{display:flex;align-items:center;gap:14px;min-width:230px;background:rgba(10,6,48,.85);border:4px solid var(--c);padding:8px 18px;font-size:11px;color:var(--c)}
+  #menu .mus canvas.pt{width:44px;height:72px} #menu .mus .qm.sm{margin-top:0;width:44px}
+  #menu .mapg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  #menu .mapg button{height:76px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;background:#1a1050;border:3px solid #3a2c8a;font-size:9px;box-shadow:0 1px 0 #0e0a3a,0 2px 0 #0e0a3a,0 3px 0 #0e0a3a,0 4px 0 #0e0a3a}
+  #menu .mapg small{font-size:6px;color:#9a8ee0} #menu .mapg button:hover{border-color:#5ff0ff}
+  #menu .mapg button.on{border-color:#ffe45e;background:#3a2a9a;box-shadow:0 0 12px rgba(255,228,94,.5)}
+  #menu .srv.big{margin:0 0 10px;font-size:9px}
 </style>
 </head>
 <body>
@@ -5440,7 +5468,7 @@ const MENU = (() => {
   const IDS = PICK, MAPS_UI = ['shibuya', 'fujikasane', 'ua', 'classic'];
   const MAP_SUB = {shibuya:'city crossing', fujikasane:'wisteria mountain', ua:'park & fountain', classic:'plain arena'};
   const V = {id:'gojo', info:'q', t0:0, live:null, seq:null};
-  const S = {open:true, screen:'home', inMatch:false, pause:false, slot:'you', you:'gojo', opp:'random', map:'shibuya', diff:'normal', code:''};
+  const S = {open:true, screen:'home', inMatch:false, pause:false, slot:'you', step:'', you:'gojo', opp:'random', map:'shibuya', diff:'normal', code:''};
   try { const j = JSON.parse(localStorage.getItem('aa_menu') || '{}'); for (const k of ['you', 'opp', 'map', 'diff']) if (j[k]) S[k] = j[k]; } catch (e) {}
   if (!IDS.includes(S.you)) S.you = 'gojo'; if (S.opp !== 'random' && !IDS.includes(S.opp)) S.opp = 'random';
   const save = () => { try { localStorage.setItem('aa_menu', JSON.stringify({you:S.you, opp:S.opp, map:S.map, diff:S.diff})); } catch (e) {} };
@@ -5466,6 +5494,13 @@ const MENU = (() => {
   const rosterHTML = (withRandom) => `<div class="roster">${IDS.map(id => `<div class="card ${(S.slot==='you'?S.you:S.opp)===id?'sel':''}" data-pick="${id}" style="--c:${col(id)}">${pc(id)}<div class="cn">${ROSTER[id].name.toUpperCase()}</div></div>`).join('')}${withRandom ? `<div class="card rnd ${S.opp==='random'&&S.slot==='opp'?'sel':''}" data-pick="random" style="--c:#9aa5c0"><div class="qm sm">?</div><div class="cn">RANDOM</div></div>` : ''}</div>`;
   const seg = (name, opts, cur) => `<div class="seg" data-seg="${name}">${opts.map(([v, l]) => `<button data-v="${v}" class="${cur===v?'on':''}">${l}</button>`).join('')}</div>`;
   const mapsHTML = () => `<div class="maps">${MAPS_UI.map(m => `<button data-map="${m}" class="${S.map===m?'on':''}"><b>${MAP_NAME[m]}</b></button>`).join('')}</div>`;
+  const MODES = {pve: ['you', 'opp', 'opts'], pvp: ['room', 'you', 'opts'], train: ['you', 'opts']};
+  const isPick = () => !!MODES[S.screen] && (S.step === 'you' || S.step === 'opp');
+  const viewing = () => S.screen === 'view' || isPick();
+  const setV = id => { V.id = id; V.info = 'p'; V.seq = null; V.t0 = performance.now(); V.live = null; };
+  const head2 = t => `<div class="hd"><div class="ht">${t}</div></div>`;
+  const bbar = right => `<div class="bbar"><button class="back" data-act="back">&lt; BACK</button>${right || ''}</div>`;
+  function stepTo(n){ S.step = n; S.slot = n === 'opp' ? 'opp' : 'you'; if (n === 'you') setV(S.you); else if (n === 'opp' && S.opp !== 'random') setV(S.opp); paint(); }
   const head = (t, sub) => `<div class="hd"><button class="back" data-go="home">&lt; BACK</button><div class="ht">${t}</div></div>`;
   const animFor = (id, tag) => { const A = (SPR3D[id] || {A:{}}).A, pref = {midoriya:{r:'r_ofa'}, zenitsu:{q:'q_charge'}}[id]; if (pref && pref[tag] && A[pref[tag]]) return pref[tag]; return Object.keys(A).find(k => k.startsWith(tag + '_')) || null; };
   const cdTxt = (id, k) => { const s = SKILLS[id][k]; if (k === 'r') return 'ULTIMATE'; return ''; };
@@ -5533,6 +5568,35 @@ const MENU = (() => {
     for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++){ if (all[y * CW + x]) continue; let n = false; for (let dy = -1; dy <= 1 && !n; dy++) for (let dx = -1; dx <= 1; dx++) if (has(all, x + dx, y + dy)) { n = true; break; } if (n) set(x, y, out); }
     g.putImageData(im, 0, 0); return cv; };
   const drawLogo = () => { const el = $m.querySelector('canvas.logo'); if (!el) return; if (!LOGO) LOGO = buildLogo(); el.width = LOGO.width; el.height = LOGO.height; el.style.width = LOGO.width * 2 + 'px'; el.style.height = LOGO.height * 2 + 'px'; el.getContext('2d').drawImage(LOGO, 0, 0); };
+  const pickHTML = () => {
+    const opp = S.step === 'opp', cur = opp ? S.opp : S.you, rnd = cur === 'random', c = rnd ? '#9aa5c0' : col(cur);
+    let left;
+    if (rnd) left = `<div class="vwrap" style="--c:${c}"><div class="stage"><div class="qm big">?</div></div><div class="vinfo"><div class="vname">RANDOM</div><div class="dim">A SURPRISE FIGHTER EVERY MATCH</div></div></div>`;
+    else { const id = cur, r = ROSTER[id], d = infoOf(id, V.info);
+      left = `<div class="vwrap" style="--c:${c}"><div class="stage"><div class="disc"></div><canvas class="vc" id="vc" width="128" height="84"></canvas></div>
+        <div class="vinfo"><div class="vname">${r.name.toUpperCase()}</div>
+          <div class="st"><span>HP</span>${bar(r.hp, 170, '#ff6b6b')}<span>SPD</span>${bar(r.spd, 240, '#6bd5ff')}</div>
+          <div class="krows">${['p', 'q', 'w', 'e', 'r'].map(k => `<button class="krow ${V.info === k ? 'sel' : ''}" data-info="${k}" data-key="${k}"><em>${k === 'p' ? 'P' : k.toUpperCase()}</em><span>${k === 'p' ? INFO[id].p[0] : SKILLS[id][k].name}</span></button>`).join('')}</div>
+          <div class="kdesc"><div class="kt">${d.t}</div><div class="kx">${d.x}</div></div></div></div>`; }
+    const cards = IDS.map(i => `<div class="gc ${cur === i ? 'sel' : ''}" data-pick="${i}" style="--c:${col(i)}">${pc(i)}<div class="cn">${ROSTER[i].name.toUpperCase()}</div></div>`).join('') + (opp ? `<div class="gc rnd ${rnd ? 'sel' : ''}" data-pick="random" style="--c:#9aa5c0"><div class="qm sm">?</div><div class="cn">RANDOM</div></div>` : '');
+    return `${head2(opp ? 'CHOOSE YOUR OPPONENT' : 'CHOOSE YOUR FIGHTER')}<div class="selw">${left}<div class="grid4">${cards}</div></div>${bbar(`<button class="start" data-act="next">${opp ? 'CONFIRM' : 'SELECT'} &gt;</button>`)}`;
+  };
+  const roomHTML = () => `${head2('ONLINE 1v1')}<div class="roomw"><div class="lobby">
+      <div class="lt">ROOM</div>
+      <button class="act" data-act="create">CREATE ROOM</button>
+      <div class="or">OR</div>
+      <div class="join"><input id="code" maxlength="4" placeholder="CODE" value="${S.code}" spellcheck="false"><button class="act" data-act="join">JOIN</button></div>
+      <div class="srv"><i></i>SERVER OFFLINE - COMING SOON</div></div></div>${bbar(`<button class="start" data-act="next">NEXT &gt;</button>`)}`;
+  const optsHTML = () => {
+    const m = S.screen, nm = id => id === 'random' ? 'RANDOM' : ROSTER[id].name.toUpperCase(), cc = id => id === 'random' ? '#9aa5c0' : col(id);
+    const side = id => `<div class="mus" style="--c:${cc(id)}">${id === 'random' ? '<div class="qm sm">?</div>' : pc(id)}<b>${nm(id)}</b></div>`;
+    const right = m === 'pve' ? `<button class="start" data-act="startPve">START &gt;</button>` : m === 'train' ? `<button class="start" data-act="startTrain">ENTER RANGE &gt;</button>` : `<div class="srv big"><i></i>SERVER OFFLINE - COMING SOON</div>`;
+    return `${head2(m === 'pve' ? 'MATCH SETUP' : m === 'train' ? 'TRAINING SETUP' : 'ONLINE SETUP')}<div class="setup">
+      <div class="mu">${side(S.you)}${m === 'pve' ? `<div class="vs">VS</div>${side(S.opp)}` : ''}</div>
+      <label>MAP</label><div class="mapg">${MAPS_UI.map(k => `<button data-map="${k}" class="${S.map === k ? 'on' : ''}"><b>${MAP_NAME[k]}</b><small>${MAP_SUB[k]}</small></button>`).join('')}</div>
+      ${m === 'pve' ? `<label>BOT</label>${seg('diff', [['easy', 'EASY'], ['normal', 'NORMAL'], ['hard', 'HARD']], S.diff)}` : ''}</div>${bbar(right)}`;
+  };
+  const stepHTML = () => ({room: roomHTML, you: pickHTML, opp: pickHTML, opts: optsHTML}[S.step] || optsHTML)();
   const SCREENS = {
     view: viewHTML,
     home: () => `<div class="home">
@@ -5556,28 +5620,10 @@ const MENU = (() => {
       </div>
       <div class="kfix">MOUSE: AIM  -  LEFT CLICK ATTACK  -  RIGHT CLICK MOVE  -  ESC MENU</div>
       <div class="opts"><button class="start" data-act="resetKeys">RESET DEFAULTS</button></div>`; },
-    pve: () => `${head('VS BOT')}
-      <div class="slots">${slotHTML('you', S.you)}<div class="vs">VS</div>${slotHTML('opp', S.opp)}</div>
-      ${rosterHTML(S.slot==='opp')}
-      <div class="opts"><div class="og"><label>MAP</label>${mapsHTML()}</div><div class="og"><label>BOT</label>${seg('diff', [['easy','EASY'],['normal','NORMAL'],['hard','HARD']], S.diff)}</div>
-      <button class="start" data-act="startPve">START &gt;</button></div>`,
-    pvp: () => `${head('ONLINE 1v1')}
-      <div class="slots one">${slotHTML('you', S.you)}<div class="lobby">
-        <div class="lt">ROOM</div>
-        <button class="act" data-act="create">CREATE ROOM</button>
-        <div class="or">OR</div>
-        <div class="join"><input id="code" maxlength="4" placeholder="CODE" value="${S.code}" spellcheck="false"><button class="act" data-act="join">JOIN</button></div>
-        <div class="srv"><i></i>SERVER OFFLINE - COMING SOON</div></div></div>
-      ${rosterHTML(false)}
-      <div class="opts"><div class="og"><label>MAP</label>${mapsHTML()}</div></div>`,
-    train: () => `${head('TRAINING RANGE')}
-      <div class="slots one">${slotHTML('you', S.you)}<div class="lobby"><div class="lt">THE RANGE</div>
-        </div></div>
-      ${rosterHTML(false)}
-      <div class="opts"><div class="og"><label>MAP</label>${mapsHTML()}</div><button class="start" data-act="startTrain">ENTER RANGE &gt;</button></div>`
+    pve: stepHTML, pvp: stepHTML, train: stepHTML
   };
   function paint(){
-    $m.className = 'scr-' + S.screen; $m.innerHTML = SCREENS[S.screen](); drawLogo(); $m.style.display = S.open ? 'block' : 'none'; $b.style.display = !S.open && !locked() ? 'block' : 'none'; tick();
+    $m.className = 'scr-' + S.screen + ' step-' + (S.step || 'x'); $m.innerHTML = SCREENS[S.screen](); drawLogo(); $m.style.display = S.open ? 'block' : 'none'; $b.style.display = !S.open && !locked() ? 'block' : 'none'; tick();
   }
   let vraf = 0;
   const OX = 42, OY = 12;                                                                // the sprite sits at (OX, OY) on the 128x84 viewer canvas; room around him for effects
@@ -5664,7 +5710,7 @@ const MENU = (() => {
     x.putImageData(id, 0, 0);
   }
   function drawView(){
-    const cv = document.getElementById('vc'); if (!S.open || S.screen !== 'view' || !cv){ vraf = 0; return; }
+    const cv = document.getElementById('vc'); if (!S.open || !viewing() || !cv){ vraf = 0; return; }
     const SP = SPR3D[V.id]; if (!V.seq) V.seq = seqFor(V.id, V.info);
     const seqUse = V.seq;
     const total = seqUse.reduce((s, g) => s + g.d, 0), t = (performance.now() - V.t0) / 1000, tt = t % total;
@@ -5688,14 +5734,14 @@ const MENU = (() => {
     vraf = requestAnimationFrame(drawView);
   }
   function tick(){
-    if (S.open && S.screen === 'view' && !vraf){ V.t0 = V.t0 || performance.now(); vraf = requestAnimationFrame(drawView); }
+    if (S.open && viewing() && !vraf){ V.t0 = V.t0 || performance.now(); vraf = requestAnimationFrame(drawView); }
     if (!S.open) return; const fr = performance.now() / 1000 * 6;
     for (const cv of $m.querySelectorAll('canvas[data-p]')){
       const id = cv.dataset.p, SP = SPR3D[id], A = SP && (SP.A.idle || SP.A.walk), c = cv.getContext('2d'); c.clearRect(0, 0, 44, 72);
       if (A && A.img && A.img.complete && A.img.naturalWidth) c.drawImage(A.img, (Math.floor(fr) % A.n) * SP.FW, 0, SP.FW, SP.FH, 0, 0, 44, 72);
     }
   }
-  function go(scr){ S.bind = null; if (scr === 'view'){ V.id = S.you; V.info = 'p'; V.seq = null; V.t0 = performance.now(); } S.screen = scr; S.slot = 'you'; S.open = true; paint(); }
+  function go(scr){ S.bind = null; S.screen = scr; S.slot = 'you'; S.step = MODES[scr] ? MODES[scr][0] : ''; if (scr === 'view' || (MODES[scr] && S.step === 'you')) setV(S.you); S.open = true; paint(); }
   const cvEl = document.getElementById('c'); let lastUnlock = -1e9;
   const fit = () => { const s = Math.min(innerWidth / 960, innerHeight / 540); document.documentElement.style.setProperty('--s', s); cvEl.style.width = 960 * s + 'px'; cvEl.style.height = 540 * s + 'px'; };   // the game fills the window (16:9, centred)
   addEventListener('resize', fit); fit();
@@ -5715,11 +5761,12 @@ const MENU = (() => {
     if (t.dataset.info){ V.info = t.dataset.info; V.seq = null; V.t0 = performance.now(); V.live = null; return paint(); }
     if (t.dataset.bind){ S.bind = S.bind === t.dataset.bind ? null : t.dataset.bind; return paint(); }
     if (t.dataset.go) return go(t.dataset.go);
-    if (t.dataset.pick){ const id = t.dataset.pick; if (S.screen === 'pve' && S.slot === 'opp') S.opp = id; else { S.you = id; if (S.screen === 'pve') S.slot = 'opp'; } save(); return paint(); }
+    if (t.dataset.pick){ const id = t.dataset.pick; if (S.step === 'opp') S.opp = id; else S.you = id; if (id !== 'random') setV(id); save(); return paint(); }
     if (t.dataset.slot){ S.slot = t.dataset.slot; return paint(); }
     if (t.dataset.map){ S.map = t.dataset.map; save(); return paint(); }
     if (t.parentElement.dataset.seg){ S[t.parentElement.dataset.seg] = t.dataset.v; save(); return paint(); }
     const a = t.dataset.act;
+    if (a === 'back' || a === 'next'){ const L = MODES[S.screen] || [], k = L.indexOf(S.step) + (a === 'next' ? 1 : -1); if (k < 0) return go('home'); if (k < L.length) stepTo(L[k]); return; }
     if (a === 'resetKeys'){ Object.assign(KB, KB_DEF); saveKeys(); return paint(); }
     if (a === 'startPve') startPve(); else if (a === 'startTrain') startTrain(); else if (a === 'resume') hide();
     else if (a === 'create'){ S.code = ''; paint(); } else if (a === 'join'){ const i = document.getElementById('code'); if (i) S.code = i.value.toUpperCase(); }
@@ -5727,7 +5774,7 @@ const MENU = (() => {
   $b.addEventListener('click', show);
   let tilted = null;
   $m.addEventListener('mousemove', e => {
-    const t = e.target.closest('.big,.card'); if (tilted && tilted !== t){ tilted.style.transform = ''; tilted = null; } if (!t) return;
+    const t = e.target.closest('.big,.card,.gc'); if (tilted && tilted !== t){ tilted.style.transform = ''; tilted = null; } if (!t) return;
     const r = t.getBoundingClientRect(), nx = (e.clientX - r.left) / r.width - 0.5, ny = (e.clientY - r.top) / r.height - 0.5;
     t.style.transform = `perspective(500px) rotateX(${-ny * 16}deg) rotateY(${nx * 16}deg) translateY(-3px)`; tilted = t;
   });
