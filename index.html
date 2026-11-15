@@ -174,7 +174,7 @@ function play3(f, name, a, o){                     // start an action animation 
   const S = SPR3D[f.id]; if (!S || !S.A[name]) return;
   const A = S.A[name], x = f.a3 || (f.a3 = {t:0, dir:'S'});
   if (a !== undefined && a !== null) x.dir = dir8(Math.cos(a), Math.sin(a));
-  o = o || {}; x.act = {name, t:o.t0 || 0, end: o.dur || (A.n/A.fps + (o.hold || 0)), hold:o.hold || o.loopHold, moveCancel:o.moveCancel};
+  o = o || {}; x.act = {name, t:o.t0 || 0, end: o.dur || (A.n/A.fps + (o.hold || 0)), hold:o.hold || o.loopHold, moveCancel:o.moveCancel, spd: AA_FIT ? Math.max(0.1, (A.n/A.fps - (o.t0||0))/AA_FIT) : 1};
 }
 function cast3(f, key, ang, stage, prevLast){       // which animation goes with each ability
   if (f.id==='gojo'){
@@ -241,7 +241,7 @@ function tick3(f, dt){
   x.t += dt; x.flash = Math.max(0, (x.flash||0) - dt);
   x.mv = sp > 30 && !(f.kx*f.kx + f.ky*f.ky > 400);
   if (f.dashT > 0 && (!x.act || x.act.name!=='dash')) { play3(f, 'dash', null, {dur:0.3}); x.dir = dir8(f.vx || dx, f.vy || dy); }
-  if (x.act){ x.act.t += dt; if (x.act.t >= x.act.end || (x.act.moveCancel && x.mv)) x.act = null; }
+  if (x.act){ x.act.t += dt*(x.act.spd||1); if (x.act.t >= x.act.end || (x.act.moveCancel && x.mv)) x.act = null; }
   const st = f.hp<=0 ? 'ko' : f.knockT>0 ? 'knockup' : (f.stun>0 || f.cocoon) ? 'stunned' : null;
   if (st){ if (x.st!==st){ x.st = st; x.stT = 0; } x.stT += dt; x.act = null; } else x.st = null;
   if (IDLEPOSE[f.id] && !x.act && !st && !x.mv && f.hp>0){      // standing still: now and then, his own idle flourish
@@ -302,8 +302,6 @@ const keys = {}, mouse = {x:W/2, y:H/2, sx:SW/2, sy:SH/2, down:false};   // x/y 
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;
   if (demo && e.code!=='Tab') demo = null;            // any key stops a combo demo
-  if (e.code===KB.q && !e.repeat && !bots && player.id==='gojo') blueRecast(player);   // 2nd Q: stop Blue
-  if (e.code===KB.q && !e.repeat && !bots && player.id==='midoriya') whipPull(player);  // 2nd Q: Black Whip pull
   keys[e.code] = true; if (e.code==='Space' || e.code.startsWith('Arrow') || Object.values(KB).includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
@@ -324,7 +322,9 @@ cv.addEventListener('mousedown', e => {
   }
   demo = null;
   mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
-  if (e.button === 2){ moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'}); }
+  if (e.button === 2){ if (player.aimK){ player.aimK = null; return; }   // right click while aiming = cancel
+    player.focus = enemy.hp>0 && Math.hypot(mouse.x-enemy.x, mouse.y-enemy.y) < enemy.r+30;
+    moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'}); }
   else mouse.down = true;
 });
 addEventListener('mouseup', e => { if (e.button !== 2) mouse.down = false; });
@@ -1291,20 +1291,228 @@ const OFA_SHOTS = [0, 1, 2, 2, 3], OFA_HOME = [0, 1.5, 1.5, 2.2, 3.0];   // ult 
 const GEAR_NEED  = [0, 3, 5, 10];                 // Air Force hits: Gear 2 at 3 total, Gear 3 at 8, Top Gear at 18 (rare)
 const gearName = g => g>=4 ? 'TOP GEAR' : 'GEAR '+g;                   // Air Force hits to reach the next gear from gear 1 / 2 / 3       // Black Whip: connects at 4m, breaks past 6m (1m = 40px)
 const autoCd = f => f.id==='todoroki' ? TODO_AUTO_CD : MELEE_CD;    // One For All: autos reset in 1s; Todoroki's bolts every 2s
-function doAuto(f){                               // swing + set the auto cooldown
+function doAutoNow(f){                            // swing + set the auto cooldown (called when the windup ends)
   if (f.chan) return;                              // no autos while channeling
   if (f.id==='bakugo' && f.empT>0){                // empowered auto locks onto an enemy inside its reach
     const lt = foe(f);
     f.empLock = false;
     if (lt && lt.hp>0 && Math.hypot(lt.x-f.x, lt.y-f.y) < MELEE_R + BLAST_LOCK + lt.r){ f.aim = Math.atan2(lt.y-f.y, lt.x-f.x); f.empLock = true; }   // lock-on keeps the tight cone; no lock = wider cone, longer reach
   }
-  auto3(f, f.id==='sukuna' && f.cleaveT>0);
+  if (!AA_NOANIM) auto3(f, f.id==='sukuna' && f.cleaveT>0);
   melee(f);
   if (f.id==='midoriya'){
     if (f.aaChain===1){ f.aaChain = 0; f.atkCd = autoCd(f); }          // 2nd swing: full reset
-    else { f.aaChain = 1; f.aaChainT = MIDO_CHAIN; f.atkCd = 0.12; }    // 1st swing: 2nd ready almost at once
+    else { f.aaChain = 1; f.aaChainT = MIDO_CHAIN + 0.6; f.atkCd = 0.12; }    // 1st swing: 2nd ready almost at once
   } else f.atkCd = autoCd(f);
 }
+// ---------- LEAGUE-STYLE AIMING: auto attack windup (0.8s, rooted, guaranteed hit) + hold-to-aim / release-to-cast ----------
+var AA_FORCE = false, AA_NOANIM = false, AA_FIT = 0;
+const AA_WIND = 0.8, AA_RE = /^(auto|cleave)/;
+const aimA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a))*255).toString(16).padStart(2, '0');
+function aaReach(f){ return f.id==='todoroki' ? 170 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
+function inAAR(f, tg){ return !!tg && tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) <= aaReach(f) + tg.r; }
+function startAA(f, tg, free){                       // begin an auto attack: stand still for the windup, then it always lands
+  tg = tg || foe(f);
+  if (f.aaW || f.chan || f.fly || f.lunge || f.stun>0 || f.hp<=0 || f.atkCd>0 || f.howT>=0 || f.dashT>0) return false;
+  if (!free && !inAAR(f, tg)){ if (shrineOf(f)) free = true; else return false; }   // trapped in a shrine: swing at the wall
+  if (!free) f.aim = Math.atan2(tg.y-f.y, tg.x-f.x);
+  const wind = (f.id==='midoriya' && f.aaChain===1) ? AA_WIND*0.5 : AA_WIND;
+  f.aaW = {t:wind, total:wind, tgt: free ? null : tg};
+  AA_FIT = wind; auto3(f, f.id==='sukuna' && f.cleaveT>0); AA_FIT = 0;   // the swing animation is stretched to fill the windup
+  return true;
+}
+function doAuto(f){ startAA(f); }
+function resolveAA(f){
+  const w = f.aaW; f.aaW = null; const tg = w.tgt;
+  if (tg){ if (tg.hp<=0 || f.stun>0) return; f.aim = Math.atan2(tg.y-f.y, tg.x-f.x); }
+  AA_FORCE = !!tg; AA_NOANIM = true;
+  try { doAutoNow(f); } finally { AA_FORCE = false; AA_NOANIM = false; }
+  f.atkCd = Math.max(0.1, f.atkCd - w.total);        // same total auto cycle as before
+}
+function tickAA(f, dt){
+  const w = f.aaW; if (!w) return;
+  if (f.hp<=0 || f.stun>0 || f.chan || f.fly || f.lunge || f.dashT>0 || f.howT>=0 || (w.tgt && w.tgt.hp<=0)){   // stun / dash / cast cancels the windup
+    f.aaW = null; f.atkCd = Math.max(f.atkCd, 0.3);
+    const x = f.a3; if (x && x.act && AA_RE.test(x.act.name)) x.act = null;
+    return;
+  }
+  if (w.tgt) f.aim = Math.atan2(w.tgt.y-f.y, w.tgt.x-f.x);
+  w.t -= dt; if (w.t <= 0) resolveAA(f);
+}
+function castSkill(f, key, ang){                     // any ability cancels an auto windup
+  const had = f.aaW, ok = castSkill0(f, key, ang);
+  if (ok && had){ f.aaW = null; f.atkCd = Math.max(f.atkCd, 0.3); }
+  return ok;
+}
+// ---------- hold a key = show the indicator, release = cast ----------
+function aimReady(f, k){
+  const sk = SKILLS[f.id] && SKILLS[f.id][k]; if (!sk) return false;
+  if (f.stun>0 || f.silT>0 || f.chan || f.lunge || f.fly) return false;
+  if (k==='r') return f.ult>=100 || f.gearWin>0 || !!f.hino;
+  if (f.id==='gojo' && k==='q' && f.blueOrb && bullets.includes(f.blueOrb)) return true;
+  if (f.id==='midoriya' && k==='q' && f.tether && !f.tether.pulled) return true;
+  if (f.id==='zenitsu'){ if (k==='w') return chg(f,'q')>=ZW_COST; if (k==='e') return f.e2>0 || (f.cd.e<=0 && chg(f,'q')>=ZE_COST); }
+  if (f.id==='tanjiro' && k==='e' && fluxLock(f)) return true;
+  if (sk.charges) return chg(f,k)>0;
+  if (sk.stages && f.qst>0) return f.qgap<=0;
+  return f.cd[k]<=0;
+}
+function releaseCast(f, k){
+  f.aim = Math.atan2(mouse.y-f.y, mouse.x-f.x);
+  if (k==='q' && f.id==='gojo' && blueRecast(f)) return;                                       // 2nd Q: stop Blue
+  if (k==='q' && f.id==='midoriya' && f.tether && !f.tether.pulled){ whipPull(f); return; }    // 2nd Q: Black Whip pull
+  castSkill(f, k, f.aim);
+}
+function aimInput(f){
+  const hl = f.keyHeld || (f.keyHeld = {});
+  for (const k of ['q','w','e','r']){
+    if (k==='q' && f.id==='zenitsu'){ zenQInput(f); continue; }   // Zenitsu Q already charges on hold and dashes on release
+    const down = !!keys[KB[k]];
+    if (down){ if (!hl[k]){ hl[k] = true; if (!f.aimK && !f.chan) f.aimK = k; } }
+    else if (hl[k]){ hl[k] = false; if (f.aimK === k){ f.aimK = null; releaseCast(f, k); } }
+  }
+  if (f.aimK && (!keys[KB[f.aimK]] || f.stun>0 || f.hp<=0)) f.aimK = null;
+}
+function aimSpec(f, k){
+  const id = f.id, tg = foe(f), P = Math.PI;
+  const ta = Math.atan2(tg.y-f.y, tg.x-f.x), spot = a => ({t:'spot', x:f.x+Math.cos(a)*90, y:f.y+Math.sin(a)*90, r:22});
+  if (id==='gojo'){
+    if (k==='q') return (f.blueOrb && bullets.includes(f.blueOrb)) ? [{t:'orb', ref:f.blueOrb, col:'#4aa8ff'}] : [{t:'arrow', range:260, w:22, col:'#4aa8ff'}];
+    if (k==='w') return [{t:'line', range:460, w:64, col:'#ff3b3b'}];
+    if (k==='e') return [{t:'buff', r:INF_R, col:'#9fe3ff'}];
+    return gojoPurple(f, f.last) ? [{t:'line', range:520, w:68, col:'#b44cff'}, {t:'self', r:165, adv:520, col:'#b44cff', faint:true}] : [{t:'self', r:DOMAIN_R, col:'#7b3fe4'}];
+  }
+  if (id==='bakugo'){
+    if (k==='q') return [{t:'cone', range:148, half:P/4, col:'#fff6b0'}];
+    if (k==='w') return [{t:'line', range:490, w:12, col:'#ffe066'}];
+    if (k==='e') return [{t:'dash', range:60, w:34, col:'#ff9a1f'}];
+    return [{t:'self', r:HOW_R, col:'#ffb347'}];
+  }
+  if (id==='midoriya'){
+    if (k==='q') return (f.tether && !f.tether.pulled && tg.hp>0) ? [{t:'target', tg, col:'#5dd98a'}] : [{t:'self', r:WHIP_CONNECT, col:'#5dd98a'}];
+    if (k==='w') return [{t:'self', r:180, col:'#b9bfc6'}];
+    if (k==='e') return [{t:'line', range:480, w:32, col:'#c8f7d8'}];
+    return [{t:'buff', col:'#7dffa8'}];
+  }
+  if (id==='todoroki'){
+    if (k==='q') return [{t:'line', range:ICE_LEN, w:44, col:'#9fe8ff'}];
+    if (k==='w') return [{t:'lanes', range:440, half:50*P/180, n:5, step:SPIDER_STEP, col:'#ff6a00'}];
+    if (k==='e') return [{t:'cone', range:VORTEX_R, half:VORTEX_HALF, col: f.lastElem==='ice' ? '#9fe8ff' : '#ff7a2a'}];
+    return [{t:'cone', range:FF_R, half:FF_HALF, adv:f.r, col:'#bfefff'}];
+  }
+  if (id==='zenitsu'){
+    if (k==='q'){ const c = Math.min(1, f.zHold||0); return [{t:'dash', range:ZQ_MIN + (ZQ_MAX-ZQ_MIN)*c, w:34, col:'#ffd93d', charge:c}]; }   // the lane grows as he charges
+    if (k==='w') return [{t:'dash', range:ZW_LEN, w:44, col:'#ffe066'}];
+    if (k==='e') return [{t:'tri', len:ZE_LEN, half:ZE_HALF, col:'#ffe066'}];
+    return [{t:'dash', range:ZR_LEN, w:70, col:'#ff7a2a'}];
+  }
+  if (id==='tanjiro'){
+    if (k==='q') return [{t:'dash', range:WW_FLIP, w:34, col:'#7fd3ff'}, {t:'self', r:WW_R, adv:WW_FLIP, col:'#7fd3ff', faint:true}];
+    if (k==='w') return [{t:'buff', r:58, col:'#7fd3ff'}];
+    if (k==='e') return fluxLock(f) ? [{t:'target', tg, col:'#ff3355'}] : [{t:'dash', range:FLUX_DASH, w:34, col:'#7fd3ff'}, {t:'cone', range:FLUX_R, half:P/2, adv:FLUX_DASH, col:'#7fd3ff', faint:true}];
+    return [{t:'buff', col:'#ff7a2a'}];
+  }
+  if (id==='sukuna'){
+    if (k==='q'){ const st = f.qst>0 ? f.qst+1 : 1, offs = st===1 ? [-0.524, 0, 0.524] : st===2 ? [-0.22, 0.22] : [0];
+      return offs.map(o => ({t:'line', range:325, w: st===3 ? 16 : 12, ang:o, col: st===3 ? '#ffffff' : st===2 ? '#dfe6ff' : '#c9b8ff'})); }
+    if (k==='w') return [{t:'dash', range:BLINK_R, w:34, col:'#ff5a5a'}];
+    if (k==='e') return [{t:'buff', r:46, col:'#ff8c1a', dots:[-P/2, P/6, 5*P/6]}];
+    return [{t:'self', r:DOMAIN_R, col:'#c0182c'}];
+  }
+  if (id==='jinwoo'){
+    if (k==='q' || k==='w') return [{t:'buff', r:f.r+14, col:'#9b5cff'}, spot(ta - P/3), spot(ta + P/3)];
+    if (k==='e') return [{t:'target', tg, col:'#b48cff'}];
+    return [spot(ta)];
+  }
+  return [];
+}
+function aimDraw(f, s, T){
+  const a0 = Math.atan2(mouse.y-f.y, mouse.x-f.x), a = a0 + (s.ang||0), adv = s.adv||0, col = s.col || '#9b5cff';
+  const ox = f.x + Math.cos(a0)*adv, oy = f.y + Math.sin(a0)*adv;
+  const dash = (on, off) => { ctx.setLineDash([on, off]); ctx.lineDashOffset = -T*60; };
+  const glow = b => { ctx.shadowColor = col; ctx.shadowBlur = b; };
+  const clr = () => { ctx.setLineDash([]); ctx.shadowBlur = 0; };
+  const spot = (x, y, r) => { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fillStyle = aimA(col, .3); ctx.fill(); dash(5, 5); ctx.strokeStyle = col; ctx.lineWidth = 2; glow(10); ctx.stroke(); clr();
+    ctx.save(); ctx.translate(x, y); ctx.globalAlpha *= .6 + Math.sin(T*5)*.25; ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, -r*.55); ctx.lineTo(r*.4, 0); ctx.lineTo(0, r*.55); ctx.lineTo(-r*.4, 0); ctx.closePath(); ctx.fill(); ctx.restore(); };
+  ctx.save(); if (s.faint) ctx.globalAlpha = .5;
+  if (s.t==='line' || s.t==='dash' || s.t==='arrow'){
+    const L = s.range, w = s.w || 18, head = s.t==='line' ? 0 : Math.min(26, w*0.8 + 8), x0 = f.r*0.5;
+    ctx.translate(ox, oy); ctx.rotate(a);
+    ctx.beginPath();
+    if (head){ ctx.moveTo(x0, -w/2); ctx.lineTo(L-head, -w/2); ctx.lineTo(L-head, -w/2-head*0.45); ctx.lineTo(L, 0); ctx.lineTo(L-head, w/2+head*0.45); ctx.lineTo(L-head, w/2); ctx.lineTo(x0, w/2); ctx.closePath(); }
+    else ctx.rect(x0, -w/2, L-x0, w);
+    const g = ctx.createLinearGradient(x0, 0, L, 0); g.addColorStop(0, aimA(col, s.t==='line' ? .5 : .12)); g.addColorStop(1, aimA(col, s.t==='line' ? .12 : .6));
+    ctx.fillStyle = g; ctx.fill(); dash(10, 6); ctx.strokeStyle = col; ctx.lineWidth = 2; glow(12); ctx.stroke(); clr();
+    if (w >= 20){ ctx.strokeStyle = aimA(col, .9); ctx.lineWidth = 2.5; const ga = ctx.globalAlpha;
+      for (let x = x0 + (T*70)%36; x < L-head-6; x += 36){ ctx.globalAlpha = ga*Math.min(1, (x-x0)/L*2 + .25); ctx.beginPath(); ctx.moveTo(x, -w/2+4); ctx.lineTo(x+9, 0); ctx.lineTo(x, w/2-4); ctx.stroke(); } ctx.globalAlpha = ga; }
+    else { ctx.strokeStyle = aimA(col, .8); ctx.lineWidth = 2; dash(4, 8); ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(L, 0); ctx.stroke(); clr(); }
+    if (s.t==='dash'){ ctx.beginPath(); ctx.arc(L, 0, f.r + 4, 0, 7); dash(5, 5); ctx.strokeStyle = col; ctx.lineWidth = 2; glow(10); ctx.stroke(); clr(); }   // where you end up
+    if (s.charge > 0){ ctx.beginPath(); ctx.arc(0, 0, f.r + 12, -Math.PI/2 - a, -Math.PI/2 - a + s.charge*Math.PI*2); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; glow(12); ctx.stroke(); }
+  } else if (s.t==='cone' || s.t==='lanes'){
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, s.range, a - s.half, a + s.half); ctx.closePath();
+    const g = ctx.createRadialGradient(ox, oy, 6, ox, oy, s.range); g.addColorStop(0, aimA(col, .1)); g.addColorStop(1, aimA(col, .55));
+    ctx.fillStyle = g; ctx.fill(); dash(10, 6); ctx.strokeStyle = col; ctx.lineWidth = 2; glow(12); ctx.stroke(); clr();
+    if (s.t==='lanes'){ ctx.strokeStyle = aimA(col, .9); ctx.lineWidth = 2;
+      for (let i=0;i<s.n;i++){ const la = a + (i-(s.n-1)/2)*s.step; ctx.beginPath(); ctx.moveTo(ox, oy);
+        for (let d=30; d<=s.range; d+=30){ const j = ((d/30)%2 ? 1 : -1)*Math.min(9, d*0.04); ctx.lineTo(ox + Math.cos(la)*d + Math.cos(la+Math.PI/2)*j, oy + Math.sin(la)*d + Math.sin(la+Math.PI/2)*j); } ctx.stroke(); } }
+  } else if (s.t==='self'){
+    const r = s.r*(1 + Math.sin(T*6)*.02), g = ctx.createRadialGradient(ox, oy, 0, ox, oy, r); g.addColorStop(0, aimA(col, .04)); g.addColorStop(1, aimA(col, .38));
+    ctx.beginPath(); ctx.arc(ox, oy, r, 0, 7); ctx.fillStyle = g; ctx.fill(); dash(10, 8); ctx.strokeStyle = col; ctx.lineWidth = 2.5; glow(14); ctx.stroke(); clr();
+    ctx.save(); ctx.translate(ox, oy); ctx.rotate(T*1.5); ctx.fillStyle = col; for (let i=0;i<8;i++){ ctx.rotate(Math.PI/4); ctx.fillRect(r-6, -2, 12, 4); } ctx.restore();
+  } else if (s.t==='circle'){
+    dash(8, 8); ctx.strokeStyle = aimA(col, .55); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.x, f.y, s.range, 0, 7); ctx.stroke(); clr();
+    const dx = mouse.x-f.x, dy = mouse.y-f.y, d = Math.hypot(dx, dy) || 1, l = Math.min(d, s.range), cx = f.x + dx/d*l, cy = f.y + dy/d*l;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, s.r); g.addColorStop(0, aimA(col, .08)); g.addColorStop(1, aimA(col, .5));
+    ctx.beginPath(); ctx.arc(cx, cy, s.r, 0, 7); ctx.fillStyle = g; ctx.fill(); dash(8, 8); ctx.strokeStyle = col; ctx.lineWidth = 2.5; glow(14); ctx.stroke(); clr();
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(T); ctx.strokeStyle = aimA(col, .6); ctx.lineWidth = 1.5; ctx.strokeRect(-s.r*.45, -s.r*.45, s.r*.9, s.r*.9); ctx.rotate(Math.PI/4); ctx.strokeRect(-s.r*.45, -s.r*.45, s.r*.9, s.r*.9); ctx.restore();
+  } else if (s.t==='target' && s.tg && s.tg.hp>0){
+    const e = s.tg; dash(3, 7); ctx.strokeStyle = col; ctx.lineWidth = 3; glow(10); ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(e.x, e.y); ctx.stroke(); clr();
+    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(T*2); ctx.beginPath(); ctx.arc(0, 0, e.r + 10, 0, 7); ctx.fillStyle = aimA(col, .15); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 3; glow(12); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.fillStyle = col; for (let i=0;i<4;i++){ ctx.rotate(Math.PI/2); ctx.fillRect(e.r + 8, -2, 10, 4); } ctx.restore();
+  } else if (s.t==='buff'){
+    const r = (s.r || (f.r + 12))*(1 + Math.sin(T*8)*.07);
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, 7); ctx.fillStyle = aimA(col, .18); ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 3; glow(14); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(T*2); ctx.strokeStyle = aimA(col, .9); ctx.lineWidth = 2; ctx.beginPath(); for (let i=0;i<6;i++){ const q = i*Math.PI/3; ctx.lineTo(Math.cos(q)*(r+8), Math.sin(q)*(r+8)); } ctx.closePath(); glow(10); ctx.stroke(); ctx.restore(); ctx.shadowBlur = 0;
+    (s.dots || []).forEach(q => spot(f.x + Math.cos(q)*46, f.y + Math.sin(q)*46, 11));
+  } else if (s.t==='spot') spot(s.x, s.y, s.r || 22);
+  else if (s.t==='tri'){
+    const p1 = [f.x + Math.cos(a - s.half)*s.len, f.y + Math.sin(a - s.half)*s.len], p2 = [f.x + Math.cos(a + s.half)*s.len, f.y + Math.sin(a + s.half)*s.len];
+    ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.closePath();
+    const g = ctx.createRadialGradient(f.x, f.y, 6, f.x, f.y, s.len); g.addColorStop(0, aimA(col, .12)); g.addColorStop(1, aimA(col, .4)); ctx.fillStyle = g; ctx.fill();
+    dash(10, 6); ctx.strokeStyle = col; ctx.lineWidth = 3; glow(14); ctx.stroke(); clr();
+  } else if (s.t==='orb' && s.ref){
+    ctx.beginPath(); ctx.arc(s.ref.x, s.ref.y, (s.ref.r || 12) + 12 + Math.sin(T*8)*2, 0, 7); ctx.fillStyle = aimA(col, .2); ctx.fill(); dash(5, 5); ctx.strokeStyle = col; ctx.lineWidth = 3; glow(14); ctx.stroke(); clr();
+  }
+  ctx.restore();
+}
+function drawAimLayer(){                            // auto attack ring + windups, then the held ability's indicator (under the fighters)
+  const T = performance.now()/1000;
+  ctx.save(); ctx.lineCap = 'round';
+  for (const f of [player, enemy]){
+    const w = f.aaW; if (!w || f.hp<=0) continue;
+    const p = 1 - w.t/w.total, col = f===player ? '#7fe3ff' : '#ff6a6a';
+    ctx.save(); ctx.strokeStyle = aimA(col, .3); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 10, 0, 7); ctx.stroke();
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.shadowColor = col; ctx.shadowBlur = 12; ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 10, -Math.PI/2, -Math.PI/2 + p*Math.PI*2); ctx.stroke();
+    if (w.tgt){ const tx = w.tgt.x, ty = w.tgt.y;
+      ctx.setLineDash([6, 8]); ctx.lineWidth = 2 + p*3; ctx.globalAlpha = .4 + .5*p; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + (tx-f.x)*p, f.y + (ty-f.y)*p); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(tx, ty, w.tgt.r + 4 + (1-p)*22, 0, 7); ctx.stroke(); }
+    ctx.restore();
+  }
+  if (!bots && player.hp>0){
+    const R = aaReach(player) + enemy.r, hot = inAAR(player, enemy), col = hot ? '#ff6a6a' : '#ffffff';
+    ctx.save(); ctx.beginPath(); ctx.arc(player.x, player.y, R, 0, 7); ctx.fillStyle = aimA(col, hot ? .07 : .03); ctx.fill();
+    ctx.setLineDash([14, 10]); ctx.lineDashOffset = -T*30; ctx.strokeStyle = aimA(col, hot ? .9 : .5); ctx.lineWidth = 2; ctx.shadowColor = col; ctx.shadowBlur = hot ? 14 : 6; ctx.stroke(); ctx.restore();
+  }
+  if (!bots && !demo && player.hp>0){
+    const f = player; let specs = null, ready = true;
+    if (f.aimK){ specs = aimSpec(f, f.aimK); ready = aimReady(f, f.aimK); }
+    else if (f.id==='zenitsu' && f.zHold>0) specs = aimSpec(f, 'q');
+    else if (f.howT>=0) specs = [{t:'circle', range:HOW_RANGE, r:HOW_LAND_R, col:'#ff9a1f'}];
+    if (specs) for (const s of specs) aimDraw(f, ready ? s : Object.assign({}, s, {col:'#8b93a7'}), T);
+  }
+  ctx.restore();
+}
+
 function airForce(f, a, dmg=4, extra){          // Midoriya's Air Force shot (E, 2nd auto, One For All); hits build gears
   const fwd = Math.max(0, f.vx*Math.cos(a) + f.vy*Math.sin(a));   // inherit his forward speed: never slower than him
   proj(f, a, Object.assign({spd:(extra && extra.eShot ? ((f.gear||1)===1 ? AF_E_SPD_G1 : AF_E_SPD) : 320) + fwd, r:16, dmg, knock:(f.gear||1)>=2 ? 850 : 450,   // Gear 2+: much stronger knockback
@@ -1335,7 +1543,7 @@ function melee(f){                               // basic attack: short-range sw
   let da = Math.abs(Math.atan2(tg.y-f.y, tg.x-f.x) - f.aim); if (da > Math.PI) da = 2*Math.PI - da; da = Math.min(da, Math.PI);
   const second = f.id==='midoriya' && f.aaChain===1;
   let landed = false;
-  if (tg.hp>0 && d < reachA+tg.r && (d <= tg.r || da < halfA + Math.asin(Math.min(1, tg.r/d)))){   // cone, counting his body width (point-blank targets always caught)
+  if (tg.hp>0 && d < reachA+tg.r+(AA_FORCE?40:0) && (AA_FORCE || d <= tg.r || da < halfA + Math.asin(Math.min(1, tg.r/d)))){   // cone, counting his body width (point-blank targets always caught)
     landed = true;
     const mg = f.id==='midoriya' && (f.gear||1) >= 2;   // Midoriya Gear 2+: autos push even harder
     let kb = emp ? 400 : f.id==='midoriya' ? (mg ? 360 : 260) : 150;   // Bakugo's boosted auto: big knockback
@@ -1974,7 +2182,7 @@ function finishChannel(f){
   const keep = f.last; f.last = c.prevLast; c.sk.cast(f, a, c.stage); f.last = c.key;
   turnAfter(f);                                    // then the body turns to where you are clicking
 }
-function castSkill(f, key, ang){
+function castSkill0(f, key, ang){
   const sk = SKILLS[f.id] && SKILLS[f.id][key];
   if (!sk || f.hp<=0 || f.stun>0 || f.fly || f.howT>=0 || f.silT>0 || f.chan || f.lunge) return false;   // silenced / channeling: no abilities
   const prevLast = f.last;
@@ -2613,8 +2821,9 @@ function update(dt){
   else {
   let dx = (keys[KB.right]?1:0) - (keys[KB.left]?1:0);
   let dy = (keys[KB.down]?1:0) - (keys[KB.up]?1:0);
-  if (dx||dy) moveTarget = null;                    // arrow keys cancel click-move
-  else if (moveTarget){
+  if (dx||dy){ moveTarget = null; player.focus = false; }   // arrow keys cancel click-move
+  if (!(dx||dy) && player.focus && enemy.hp>0) moveTarget = inAAR(player, enemy) ? null : {x:enemy.x, y:enemy.y};   // right-clicked the enemy: chase, then auto
+  if (!(dx||dy) && moveTarget){
     const tx = moveTarget.x-player.x, ty = moveTarget.y-player.y, td = Math.hypot(tx,ty);
     if (td < 8) moveTarget = null; else { dx = tx/td; dy = ty/td; }
   }
@@ -2622,19 +2831,15 @@ function update(dt){
   if (stunned){ dx = 0; dy = 0; }
   const m = Math.hypot(dx,dy) || 1; dx/=m; dy/=m;
   player.aim = Math.atan2(mouse.y-player.y, mouse.x-player.x);
-  if (keys[KB.dash] && player.dashCd<=0 && (dx||dy) && !stunned){
+  if (keys[KB.dash] && player.dashCd<=0 && (dx||dy) && !stunned && !player.aaW){
     player.dashT = 0.15; player.dashCd = 1.2;
     player.vx = dx*620; player.vy = dy*620;
   }
   if (player.dashT>0){ player.dashT -= dt; }
   else { player.vx = dx*player.spd; player.vy = dy*player.spd; }
-  const hl = player.keyHeld || (player.keyHeld = {});   // one cast per key press: holding a key never spends extra charges
-  for (const k of ['q','w','e','r']){
-    if (k==='q' && player.id==='zenitsu'){ zenQInput(player); continue; }
-    if (keys[KB[k]]){ if (!hl[k] && castSkill(player,k,player.aim)) hl[k] = true; } else hl[k] = false;
-  }
+  aimInput(player);                                 // hold = indicator, release = cast
   if (player.howT>=0){ if (mouse.down){ mouse.down = false; howLaunch(player, mouse.x, mouse.y); } }
-  else if (mouse.down && player.atkCd<=0 && player.hp>0 && !stunned && !player.fly){ doAuto(player); }
+  else if ((mouse.down || player.focus) && !dx && !dy && !player.aimK && player.hp>0 && !stunned && !player.fly){ startAA(player); }
   }
 
   if (training){
@@ -2651,7 +2856,7 @@ function update(dt){
     if (f.qgap>0) f.qgap -= dt;
     if (f.qst>0){ f.qwin -= dt; if (f.qwin<=0){ f.qst = 0; const qs = SKILLS[f.id] && SKILLS[f.id].q; if (qs) f.cd.q = qs.cd; } }   // window over: cooldown
     if (f.chan){ if (f.stun>0) f.chan = null; else { f.chan.t -= dt; if (f.chan.t <= 0) finishChannel(f); } }   // channel: stun interrupts
-    if (f.cleaveT>0) f.cleaveT -= dt;
+    if (f.cleaveT>0) f.cleaveT -= dt; tickAA(f, dt);
     if (f.burnT>0){ f.burnT -= dt; f.burnTick = (f.burnTick||0) - dt;     // burn: tiny chip ticks
       if (f.burnTick<=0){ f.burnTick = 0.25; HIT_TICK = true; hit(f, BURN_TICK, f.burnSrc); HIT_TICK = false; } }
     if (f.iceT>0) f.iceT -= dt;
@@ -2681,7 +2886,7 @@ function update(dt){
     if (f.id==='tanjiro') updateTanjiro(f, dt);
     if (f.id==='zenitsu') updateZenitsu(f, dt);
     if (updateBakugo(f, dt) || updateLunge(f, dt)){ f.atkCd -= dt; f.inv -= dt; continue; }
-    if (f.stun>0 || f.root>0){ f.vx = 0; f.vy = 0; }   // domain wind-up roots the caster
+    if (f.stun>0 || f.root>0 || f.aaW){ f.vx = 0; f.vy = 0; }   // domain wind-up roots the caster
     const gi = foe(f), infD0 = gi && gi.infT>0 ? Math.hypot(f.x-gi.x, f.y-gi.y) : 0;   // Gojo's Infinity: can't walk into the bubble
     let sm = f.dashT>0 ? 1 : (f.slowT>0 ? 0.4 : f.lslowT>0 ? 0.8 : 1) * (f.howT>=0 ? 0.6 : 1) * (f.tetherT>0 ? 0.9 : 1) * (f.iceT>0 ? 0.9 : 1) * (f.phosT>0 ? 1.3 : 1) * (f.hino ? HINO_SPD : 1) * (f.wpT>0 ? WP_SPD : 1) * (f.zSlowT>0 ? f.zSlowK : 1) * (f.zHold>0 ? 0.6 : 1) * (f.frost ? 0.8 : 1) * (f.ofaT>0 ? 1 + GEAR_BONUS[f.gear||1] : 1) * (f.id==='midoriya' && zones.some(z => z.kind==='smoke' && z.src===f && Math.hypot(f.x-z.x, f.y-z.y) < z.r) ? 1.2 : 1);   // dashes ignore slows; Midoriya +20% in his smoke
     if (f.asleep && sm < 1) sm = 1;                  // Zenitsu asleep: his movement speed can't be reduced
@@ -4320,7 +4525,7 @@ function draw(){
   const shk = Math.max(FX3.shake, MD.shake)*16, shx = shk ? (Math.random()-0.5)*shk : 0, shy = shk ? (Math.random()-0.5)*shk : 0;   // Purple explosion shakes the screen
   ctx.save(); ctx.setTransform(CAM_Z, 0, 0, CAM_Z*TILT, -camX*CAM_Z + shx, -camY*CAM_Z*TILT + shy);   // tilted world view
   drawArena();
-  FX3.ground(); JW.ground();
+  FX3.ground(); JW.ground(); drawAimLayer();
   for (const z of zones){
     if (z.kind==='smoke' || FX3.ownsZone(z) || TD.ownsZone(z) || ZN.ownsZone(z)) continue;   // smoke: drawn over the fighters. 3D chars' zones: FX3
     if (z.kind==='flashfreeze' || z.kind==='ffboom'){   // Flashfire Freeze cone: frost, then fire
@@ -4701,7 +4906,7 @@ function runDemo(dt){                               // plays the combo on the du
   demo.t += dt;
   const ea = Math.atan2(tg.y-f.y, tg.x-f.x), dist = Math.hypot(tg.x-f.x, tg.y-f.y), reach = MELEE_R + tg.r - 6;
   f.aim = ea; mouse.x = tg.x; mouse.y = tg.y; f.vx = f.vy = 0;
-  const next = () => { demo.i++; demo.t = 0; };
+  const next = () => { demo.i++; demo.t = 0; demo.sA = 0; };
   const walk = () => { f.vx = Math.cos(ea)*f.spd; f.vy = Math.sin(ea)*f.spd; };
   if (demo.t > (st.max || 3)){ next(); return; }   // safety: skip a step that can't happen
   switch (st.do){
@@ -4711,7 +4916,7 @@ function runDemo(dt){                               // plays the combo on the du
     case 'cast': if (castSkill(f, st.k, ea)) next(); break;
     case 'waitBlue': if (!f.blueOrb) next(); break;
     case 'approach': if (dist > (st.d || reach)) walk(); else next(); break;
-    case 'auto': if (dist > (f.id==='todoroki' ? TODO_CONE_R - 10 : reach)) walk(); else if (f.atkCd<=0){ doAuto(f); next(); } break;
+    case 'auto': if (dist > (f.id==='todoroki' ? TODO_CONE_R - 10 : reach)) walk(); else if (f.aaW){} else if (demo.sA){ next(); } else if (f.atkCd<=0 && startAA(f)) demo.sA = 1; break;
     case 'dash': if (f.dashCd<=0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(ea)*620; f.vy = Math.sin(ea)*620; } next(); break;
     case 'launch': if (f.howT >= st.at){ howLaunch(f, tg.x, tg.y); next(); } break;
     case 'pull': whipPull(f); next(); break;
