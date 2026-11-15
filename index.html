@@ -289,7 +289,7 @@ function draw3d(f){                                 // called inside drawFighter
 // ---------- SETUP ----------
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const SW = cv.width, SH = cv.height;              // screen size
-const W = 1800, H = 1000;                          // arena (world) size: bigger than the screen, camera follows
+const W = 2880, H = 1600;                          // arena (world) size: bigger than the screen, camera follows
 let camX = 0, camY = 0;
 const CAM_Z = 0.9, TILT = Math.sin(55*Math.PI/180), HF = Math.cos(55*Math.PI/180)/Math.sin(55*Math.PI/180);   // camera: zoom, 60 degree tilt (ground squash), height -> ground-y
 const VW = () => SW/CAM_Z, VH = () => SH/(CAM_Z*TILT);   // how much of the world the camera sees
@@ -355,9 +355,23 @@ const bullets = [], fx = [], zones = [], beams = [], arcs = [];
 const MAPS = ['shibuya', 'fujikasane', 'ua', 'classic'];
 const MAP_NAME = {shibuya:'SHIBUYA', fujikasane:'MT. FUJIKASANE', ua:'PARK', classic:'CLASSIC'};
 const MAP_GROUND = {shibuya:'#2b2d33', fujikasane:'#22322a', ua:'#4a8f3f', classic:'#2a5624'};
+const WIN = {fujikasane:{l:110, r:110, t:150, b:90}, ua:{l:110, r:110, t:150, b:300}};   // thickness of the tree wall on each side (world px)
+const WIN0 = {l:0, r:0, t:0, b:0}, winOf = () => WIN[MAP] || WIN0;
+function treeWalls(m, sp){                           // four strips of dense trees round the map edge (Mt. Fujikasane keeps a gap on each side where the path warps)
+  const w = WIN[m], P = (a, b, c, d, side) => ({type:'poly', kind:'treewall', side, sp, pts:[[a, b], [c, b], [c, d], [a, d]]}), gap = m==='fujikasane' ? 130 : 0, cy = H/2;
+  if (gap){                                          // Mt. Fujikasane: trees along the far wall and upper sides, the Japanese house (wings + close roof) below
+    const hp = pts => ({type:'poly', kind:'house', pts}), yb = H - w.b;
+    return [P(0, 0, W, w.t, 't'), P(0, w.t, w.l, cy - gap, 'l'), P(W - w.r, w.t, W, cy - gap, 'r'),
+      hp([[0, cy + gap], [w.l, cy + gap], [w.l, yb], [0, yb]]), hp([[W - w.r, cy + gap], [W, cy + gap], [W, yb], [W - w.r, yb]]), hp([[0, yb], [W, yb], [W, H], [0, H]])];
+  }
+  const out = [P(0, 0, W, w.t, 't'), P(0, H - w.b, W, H, 'b')];
+  if (0) out.push();
+  else out.push(P(0, w.t, w.l, H - w.b, 'l'), P(W - w.r, w.t, W, H - w.b, 'r'));
+  return out;
+}
 let MAP = 'shibuya';
 // ---------- SHIBUYA GEOMETRY: tilted crossing triangle, one straight street out of each edge, buildings in between ----------
-const SHIB_TRI = [[600, 230], [1430, 540], [800, 860]];
+const SHIB_TRI = [[960, 368], [2288, 864], [1280, 1376]];
 function rayToMapEdge(p, d){ let t = 1e9; if (d[0] > 1e-9) t = Math.min(t, (W - p[0])/d[0]); if (d[0] < -1e-9) t = Math.min(t, -p[0]/d[0]); if (d[1] > 1e-9) t = Math.min(t, (H - p[1])/d[1]); if (d[1] < -1e-9) t = Math.min(t, -p[1]/d[1]); return t; }
 function shibGeom(){
   const T = SHIB_TRI, G = [(T[0][0]+T[1][0]+T[2][0])/3, (T[0][1]+T[1][1]+T[2][1])/3];
@@ -387,39 +401,46 @@ const LAYOUTS = {                                    // half: mirrored to the ot
     {type:'circle', x:520, y:250, r:50}, {type:'circle', x:380, y:670, r:44},
     {type:'box', x:700, y:130, w:170, h:36}, {type:'box', x:150, y:170, w:40, h:120},
     {type:'box', x:640, y:340, w:48, h:48, breakable:true, hp:20}, {type:'box', x:300, y:300, w:48, h:48, breakable:true, hp:20},
-    {type:'circle', x:560, y:590, r:22, breakable:true, hp:12}, {type:'circle', x:720, y:660, r:22, breakable:true, hp:12}], mid:[]},
-  shibuya:{abs:true, spawn:[[615, 543], [1275, 543]], half:[], mid:[   // built from SHIB: 3 building blocks around the tilted crossing
+    {type:'circle', x:560, y:590, r:22, breakable:true, hp:12}, {type:'circle', x:720, y:660, r:22, breakable:true, hp:12}], mid:[],
+    extra:{seed:5, n:30, pad:130, cx:110, center:230, gap:100, pool:[
+      {w:2, o:{type:'circle', r:44}}, {w:2, o:{type:'box', w:170, h:36}}, {w:2, o:{type:'box', w:40, h:120}},
+      {w:3, o:{type:'box', w:48, h:48, breakable:true, hp:20}}, {w:3, o:{type:'circle', r:22, breakable:true, hp:12}}]}},
+  shibuya:{abs:true, spawn:[[984, 869], [2040, 869]], half:[], mid:[   // built from SHIB: 3 building blocks around the tilted crossing
     ...SHIB.blds.map(b => ({type:'poly', kind:'building', pts:b.pts, towers:b.towers})),
     ...SHIB.blds.slice(0, 2).map(b => ({type:'circle', x: Math.round(b.V[0] + b.bis[0]*12), y: Math.round(b.V[1] + b.bis[1]*12), r:10, kind:'tlight'})),   // traffic lights on the sidewalk corners
     {type:'box', x: Math.round(SHIB.streets[0].M[0] + SHIB.streets[0].n[0]*150 + SHIB.streets[0].e[0]*170), y: Math.round(SHIB.streets[0].M[1] + SHIB.streets[0].n[1]*150 + SHIB.streets[0].e[1]*170), w:36, h:76, kind:'car'},
     {type:'box', x: Math.round(SHIB.streets[2].M[0] + SHIB.streets[2].n[0]*130 - SHIB.streets[2].e[0]*150), y: Math.round(SHIB.streets[2].M[1] + SHIB.streets[2].n[1]*130 - SHIB.streets[2].e[1]*150), w:76, h:36, kind:'car', mir:true},
     ...[[0, 0.45, 1], [1, 0.5, -1]].map(([bi, t, side]) => { const b = SHIB.blds[bi], P = b.pts, a = P[0], c = side > 0 ? P[1] : P[P.length-1], d = [c[0]-a[0], c[1]-a[1]], L = Math.hypot(d[0], d[1]); let nx = -d[1]/L, ny = d[0]/L;
       const mx = a[0] + d[0]*t, my = a[1] + d[1]*t; if (polyInside(P, mx + nx*10, my + ny*10)){ nx = -nx; ny = -ny; } return {type:'circle', x: Math.round(mx + nx*24), y: Math.round(my + ny*24), r:16, breakable:true, hp:12, kind:'trash'}; }),
-    {type:'box', x:243, y:690, w:180, h:38, kind:'bus'}, {type:'box', x:1091, y:902, w:38, h:180, kind:'bus', mir:true},   // 2 buses
-    {type:'box', x:963, y:119, w:36, h:76, kind:'car', mir:true}, {type:'box', x:1313, y:779, w:36, h:76, kind:'car'}, {type:'box', x:332, y:939, w:76, h:36, kind:'car', mir:true}]},   // 3 more cars   // trash cans on sidewalks
+    {type:'box', x:389, y:1104, w:180, h:38, kind:'bus'}, {type:'box', x:1746, y:1443, w:38, h:180, kind:'bus', mir:true},   // 2 buses
+    {type:'box', x:1541, y:190, w:36, h:76, kind:'car', mir:true}, {type:'box', x:2101, y:1246, w:36, h:76, kind:'car'}, {type:'box', x:531, y:1502, w:76, h:36, kind:'car', mir:true}],
+    extra:{seed:9, n:46, free:true, pad:130, gap:100, pool:[
+      {w:5, o:{type:'box', w:36, h:76, kind:'car'}}, {w:4, o:{type:'box', w:76, h:36, kind:'car'}}, {w:5, o:{type:'circle', r:16, breakable:true, hp:12, kind:'trash'}},
+      {w:1, o:{type:'box', w:180, h:38, kind:'bus'}}, {w:1, o:{type:'box', w:38, h:180, kind:'bus'}}, {w:2, o:{type:'circle', r:10, kind:'tlight'}}]}},   // 3 more cars   // trash cans on sidewalks
   fujikasane:{half:[                                 // mountain: boulders, wisteria trees, offering boxes and wisteria bushes
     {type:'circle', x:470, y:250, r:40, kind:'rock'}, {type:'circle', x:330, y:690, r:36, kind:'rock'}, {type:'circle', x:620, y:720, r:28, kind:'rock'},
     {type:'circle', x:250, y:170, r:34, kind:'wisteria'}, {type:'circle', x:620, y:150, r:34, kind:'wisteria'},
     {type:'box', x:330, y:330, w:44, h:44, breakable:true, hp:20, kind:'offering'},
     {type:'circle', x:560, y:560, r:20, breakable:true, hp:12, kind:'shrub'}, {type:'circle', x:660, y:300, r:20, breakable:true, hp:12, kind:'shrub'}],
     mid:[{type:'circle', x:800, y:450, r:40, canopy:135, kind:'bigtree'},          // giant wisteria tree in the middle (unbreakable)
-      {type:'poly', kind:'forest', back:true, pts:[[0, 0], [1800, 0], [1800, 90], [0, 90]]},          // far wall: misty forest
-      {type:'poly', kind:'forest', back:true, pts:[[0, 90], [90, 90], [90, 380], [0, 380]]},          // side walls: forest up top...
-      {type:'poly', kind:'forest', back:true, pts:[[1710, 90], [1800, 90], [1800, 380], [1710, 380]]},
-      {type:'poly', kind:'house', pts:[[0, 620], [90, 620], [90, 910], [0, 910]]},                       // ...house wings lower down
-      {type:'poly', kind:'house', pts:[[1710, 620], [1800, 620], [1800, 910], [1710, 910]]},
-      {type:'poly', kind:'house', pts:[[0, 910], [1800, 910], [1800, 1000], [0, 1000]]}]},             // close wall: the house roof
-  ua:{abs:true, half:[                              // the park: trees, benches, lamps, a food stall, trash cans, flower bushes
+      ...treeWalls('fujikasane', 'wis')],                                                           // wisteria tree wall round the edge
+    extra:{seed:21, n:26, pad:100, cx:120, center:270, lane:100, gap:110, pool:[
+      {w:3, o:{type:'circle', r:36, kind:'rock'}}, {w:2, o:{type:'circle', r:28, kind:'rock'}}, {w:4, o:{type:'circle', r:34, kind:'wisteria'}},
+      {w:3, o:{type:'box', w:44, h:44, breakable:true, hp:20, kind:'offering'}}, {w:4, o:{type:'circle', r:20, breakable:true, hp:12, kind:'shrub'}}]}},   // more props
+  ua:{abs:true, k:1.6, half:[                              // the park: trees, benches, lamps, a food stall, trash cans, flower bushes
     {type:'circle', x:380, y:230, r:34, kind:'parktree'}, {type:'circle', x:700, y:160, r:30, kind:'parktree'}, {type:'circle', x:300, y:780, r:34, kind:'parktree'},
     {type:'box', x:560, y:360, w:96, h:26, kind:'bench'}, {type:'box', x:470, y:640, w:96, h:26, kind:'bench'},
-    {type:'box', x:640, y:830, w:120, h:70, kind:'stall'},
+    {type:'box', x:640, y:740, w:120, h:70, kind:'stall'},
     {type:'circle', x:720, y:300, r:12, kind:'lamp'}, {type:'circle', x:560, y:720, r:12, kind:'lamp'},
     {type:'circle', x:320, y:410, r:18, breakable:true, hp:12, kind:'trash'}, {type:'circle', x:770, y:640, r:22, breakable:true, hp:12, kind:'flowerbush'}],
-    mid:[{type:'circle', x:900, y:500, r:120, water:true, kind:'fountain'}]}   // fountain: can't walk in, shots fly over
+    mid:[{type:'circle', x:900, y:500, r:120, water:true, kind:'fountain'}, ...treeWalls('ua', 'oak')],
+    extra:{seed:33, n:30, pad:100, cx:120, center:290, lane:90, gap:110, pool:[
+      {w:4, o:{type:'circle', r:32, kind:'parktree'}}, {w:3, o:{type:'box', w:96, h:26, kind:'bench'}}, {w:1, o:{type:'box', w:120, h:70, kind:'stall'}},
+      {w:3, o:{type:'circle', r:12, kind:'lamp'}}, {w:2, o:{type:'circle', r:18, breakable:true, hp:12, kind:'trash'}}, {w:3, o:{type:'circle', r:22, breakable:true, hp:12, kind:'flowerbush'}}]}}   // fountain: can't walk in, shots fly over
 };
 const STREETS = {fujikasane:[                       // the stone path runs off both sides and loops back around
-  {out:f => f.x <= f.r + 1 && f.y > 380 && f.y < 620, x:50, y:500, ax:1, ay:0},
-  {out:f => f.x >= W - f.r - 1 && f.y > 380 && f.y < 620, x:W-50, y:500, ax:-1, ay:0}],
+  {out:f => f.x <= f.r + 1 && Math.abs(f.y - H/2) < 130, x:50, y:H/2, ax:1, ay:0},
+  {out:f => f.x >= W - f.r - 1 && Math.abs(f.y - H/2) < 130, x:W-50, y:H/2, ax:-1, ay:0}],
   shibuya: SHIB.streets.map(st => ({
     out: f => { if (!(f.x <= f.r + 1 || f.x >= W - f.r - 1 || f.y <= f.r + 1 || f.y >= H - f.r - 1)) return false;
       const along = (f.x - st.A[0])*st.e[0] + (f.y - st.A[1])*st.e[1], out = (f.x - st.A[0])*st.n[0] + (f.y - st.A[1])*st.n[1]; return out > 0 && along > 0 && along < st.len; },
@@ -439,13 +460,41 @@ function polyPrep(o){                              // bounding box + center for 
   const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
   o.x = (x0+x1)/2; o.y = (y0+y1)/2; o.w = x1-x0; o.h = y1-y0; return o;
 }
+function scatter(out, sp){                          // extra props at seeded random spots, always leaving fighting lanes between them. Mirrored unless sp.free
+  const r = rng(sp.seed), wi = winOf(), rad = o => o.type==='circle' ? o.r : Math.hypot(o.w, o.h)/2, gap = sp.gap || 110;
+  const taken = out.filter(o => o.type !== 'poly').map(o => ({x:o.x, y:o.y, r:rad(o)}));
+  const blds = out.filter(o => o.kind==='building'), spawns = [spawnPt(0), spawnPt(1)];
+  const tot = sp.pool.reduce((a, p) => a + p.w, 0);
+  let n = 0;
+  for (let att = 0; n < sp.n && att < 12000; att++){
+    let q = r()*tot, pk = sp.pool[0]; for (const p of sp.pool){ q -= p.w; if (q < 0){ pk = p; break; } }
+    const o = {...pk.o}, ra = rad(o), pad = sp.pad || 100;
+    const x = sp.free ? pad + r()*(W - 2*pad) : wi.l + pad + r()*(W/2 - (sp.cx || 120) - wi.l - pad);
+    const y = wi.t + pad + r()*(H - wi.t - wi.b - 2*pad);
+    if (spawns.some(s => Math.hypot(x - s[0], y - s[1]) < 230)) continue;
+    if (sp.free){
+      if (polyInside(SHIB.T, x, y)) continue;                                  // keep the crossing itself open
+      if (blds.some(b => polyInside(b.pts, x, y) || polyNear(b.pts, x, y).d < ra + 60)) continue;
+      if (SHIB.streets.some(st => (x - st.M[0])*st.n[0] + (y - st.M[1])*st.n[1] > -40 && Math.abs((x - st.M[0])*st.e[0] + (y - st.M[1])*st.e[1]) < 140)) continue;   // keep each street's middle lane clear
+    } else {
+      if (sp.lane && Math.abs(y - H/2) < sp.lane + ra) continue;               // keep the middle road clear
+      const dc = Math.hypot(x - W/2, y - H/2); if (dc < (sp.center || 260) || 2*dc < 2*ra + gap) continue;
+    }
+    if (taken.some(t => Math.hypot(x - t.x, y - t.y) < ra + t.r + gap)) continue;
+    o.x = Math.round(x); o.y = Math.round(y); o.max = o.hp;
+    if (sp.free){ o.mir = r() < 0.5; out.push(o); taken.push({x:o.x, y:o.y, r:ra}); }
+    else { out.push(o); out.push({...o, x:W - o.x, y:H - o.y, mir:true}); taken.push({x:o.x, y:o.y, r:ra}, {x:W - o.x, y:H - o.y, r:ra}); }
+    n++;
+  }
+}
 function makeObstacles(){
-  const L = LAYOUTS[MAP] || LAYOUTS.classic, out = [], sx = L.abs ? 1 : W/1600, sy = L.abs ? 1 : H/900;   // older layouts were drawn for 1600x900
+  const L = LAYOUTS[MAP] || LAYOUTS.classic, out = [], sx = L.k || (L.abs ? 1 : W/1600), sy = L.k || (L.abs ? 1 : H/900);   // older layouts were drawn for 1600x900
   for (const o0 of L.half){
     if (o0.type==='poly'){ out.push(polyPrep({...o0, pts:o0.pts.map(p => [...p]), towers: o0.towers && o0.towers.map(t => ({h:t.h, pts:t.pts.map(p => [...p])}))})); out.push(polyPrep({...o0, mir:true, pts:o0.pts.map(([x, y]) => L.mirror==='x' ? [W-x, y] : [W-x, H-y]).reverse(),
       towers: o0.towers && o0.towers.map(t => ({h:t.h, pts:t.pts.map(([x, y]) => L.mirror==='x' ? [W-x, y] : [W-x, H-y]).reverse()}))})); continue; }
     const o = {...o0, x:o0.x*sx, y:o0.y*sy}; out.push({...o, max:o.hp}); out.push({...o, x:W-o.x, y: L.mirror==='x' ? o.y : H-o.y, max:o.hp, mir:true}); }
   for (const o0 of L.mid) out.push(o0.type==='poly' ? polyPrep({...o0, pts:o0.pts.map(p => [...p]), towers: o0.towers && o0.towers.map(t => ({h:t.h, pts:t.pts.map(p => [...p])}))}) : {...o0, x:o0.x*sx, y:o0.y*sy, max:o0.hp});
+  if (L.extra) scatter(out, L.extra);
   return out;
 }
 const PX = 4;                                        // one art pixel = 4 world pixels
@@ -502,7 +551,7 @@ function paintFuji(g, w, h){
   const {R, P, disc} = pixTools(g), r = rng(11), cy = Math.floor(h/2);
   for (let y=0; y<h; y++) for (let x=0; x<w; x++){ const n = r(); P(x, y, n < 0.15 ? '#1d2b24' : n < 0.3 ? '#27382e' : n < 0.33 ? '#30463a' : '#22322a'); }   // night grass
   const tcx = w/2, tcy = cy, RING = 32, pathY = x => cy + Math.round(Math.sin(x/w*Math.PI*2)*4);   // cobblestone path: in from both sides, ringing the tree
-  const onPath = (x, y) => { const d = Math.hypot(x - tcx, y - tcy); if (Math.abs(d - RING) < 4.6) return true; return Math.abs(x - tcx) > RING - 1 && Math.abs(y - pathY(x)) < 4.6 && d > RING; };
+  const onPath = (x, y) => { const d = Math.hypot(x - tcx, y - tcy); if (Math.abs(d - RING) < 9) return true; return Math.abs(x - tcx) > RING - 1 && Math.abs(y - pathY(x)) < 9 && d > RING; };
   for (let y=0; y<h; y++) for (let x=0; x<w; x++){ if (!onPath(x, y)) continue;
     const row = Math.floor(y/3), cell = Math.floor((x + (row % 2)*1.5)/3), hv = ((cell*73856093) ^ (row*19349663)) >>> 0, gx = (x + (row % 2)*1.5) % 3, gy = y % 3;
     let col = ['#7d8287', '#8d9296', '#9aa0a5', '#868b8f'][hv % 4];
@@ -527,23 +576,36 @@ function paintFuji(g, w, h){
     const x = 4 + Math.floor(r()*(w-8)), y = 4 + Math.floor(r()*(h-8));
     for (let k=0; k<6; k++) P(x + Math.floor(r()*4) - 2, y + Math.floor(r()*4) - 2, ['#9a6bd0','#b48be0','#d7b8ff'][k%3]);
   }
+  paintWallFloor(g, w, h, '#161f1c', '#1d2b25', ['#6a4a9a', '#0f1814']);
   g.globalAlpha = 0.08; R(0, 0, w, h, '#6b5bd6'); g.globalAlpha = 1;    // moonlight tint
 }
 // ----- U.A. GROUND: mowed training field, running track around the fountain, stands on the edges -----
+function steelFence(g, w, h){                       // steel fence along the inner edge of the tree wall (instead of a cement wall)
+  const {R} = pixTools(g), wi = winOf(), t = Math.round(wi.t/PX), b = Math.round(wi.b/PX), l = Math.round(wi.l/PX), rt = Math.round(wi.r/PX);
+  const BAR = '#8e9aa6', RAIL = '#cfd8e0', POST = '#56606a', CAP = '#eef3f7', SH = '#233a28';
+  const horiz = (y0, x0, x1) => { R(x0, y0 + 8, x1 - x0, 2, SH);
+    for (let x = x0; x < x1; x += 2) R(x, y0 + 1, 1, 7, BAR);
+    R(x0, y0 + 1, x1 - x0, 1, RAIL); R(x0, y0 + 6, x1 - x0, 1, RAIL);
+    for (let x = x0; x < x1; x += 24){ R(x, y0 - 1, 3, 9, POST); R(x, y0 - 2, 3, 1, CAP); R(x, y0 + 1, 1, 7, CAP); } };
+  const vert = (x0, y0, y1) => { R(x0 + 1, y0, 2, y1 - y0, RAIL); R(x0 + 3, y0, 1, y1 - y0, SH);
+    for (let y = y0; y < y1; y += 24){ R(x0, y, 4, 3, POST); R(x0, y, 4, 1, CAP); } };
+  horiz(t - 8, l, w - rt); horiz(h - b, l, w - rt); vert(l - 4, t, h - b); vert(w - rt, t, h - b);
+}
 function paintUA(g, w, h){                          // the park: grass, stone plaza around the fountain, gravel paths, hedges
   const {R, P} = pixTools(g), r = rng(23), cx = w/2, cy = h/2;
   for (let y=0; y<h; y++) for (let x=0; x<w; x++){ const n = r(), band = Math.floor((x + y*0.4)/14) % 2; P(x, y, n < 0.08 ? '#3f8236' : n < 0.12 ? '#5aa54a' : band ? '#4a8f3f' : '#4f9643'); }
   const gravel = (x, y) => { const n = r(); P(x, y, n < 0.3 ? '#b9a67e' : n < 0.6 ? '#c9b78f' : n < 0.9 ? '#d6c59c' : '#a08d66'); };
   const pathSeg = (x0, y0, x1, y1, wd) => { const L = Math.hypot(x1-x0, y1-y0), dx = (x1-x0)/L, dy = (y1-y0)/L;
     for (let t=0; t<L; t+=0.5) for (let k=-wd/2; k<=wd/2; k+=0.5){ const x = Math.round(x0 + dx*t - dy*k), y = Math.round(y0 + dy*t + dx*k); if (Math.abs(k) > wd/2 - 0.6) P(x, y, '#8f7d58'); else gravel(x, y); } };
-  pathSeg(0, cy, w, cy, 9); pathSeg(cx, 0, cx, h, 9);                              // cross paths
-  pathSeg(30, 22, cx, cy, 7); pathSeg(w-30, h-22, cx, cy, 7); pathSeg(w-30, 22, cx, cy, 7); pathSeg(30, h-22, cx, cy, 7);   // diagonals
+  pathSeg(0, cy, w, cy, 16); pathSeg(cx, 0, cx, h, 16);                              // cross paths
+  pathSeg(34, 44, cx, cy, 12); pathSeg(w-34, h-34, cx, cy, 12); pathSeg(w-34, 44, cx, cy, 12); pathSeg(34, h-34, cx, cy, 12);   // diagonals
   for (let y=0; y<h; y++) for (let x=0; x<w; x++){ const d = Math.hypot(x-cx, y-cy);   // paved plaza around the fountain
     if (d < 44){ const ring = Math.floor(d/3), seg = Math.floor((Math.atan2(y-cy, x-cx) + 3.15) * (ring+2)); P(x, y, (ring + seg) % 2 ? '#cfc6b0' : '#bdb39b'); if (d > 43) P(x, y, '#8a8270'); } }
   for (let i=0; i<260; i++){ const x = Math.floor(r()*w), y = Math.floor(r()*h); if (Math.hypot(x-cx, y-cy) < 46) continue; P(x, y, ['#ffffff','#ffd23a','#ff8fb3','#c39af0'][i%4]); }   // flowers in the grass
   for (let i=0; i<120; i++){ const x = Math.floor(r()*w), y = Math.floor(r()*h); P(x, y, '#3a7a32'); P(x, y-1, '#5aa54a'); }   // tufts
   const hedge = (x, y, ww, hh) => { R(x, y, ww, hh, '#2f6b30'); for (let i=0; i<ww*hh/3; i++){ const xx = x + Math.floor(r()*ww), yy = y + Math.floor(r()*hh); P(xx, yy, r() < 0.5 ? '#3f8a3a' : '#25572a'); } };
-  hedge(0, 0, w, 5); hedge(0, h-5, w, 5); hedge(0, 0, 4, h); hedge(w-4, 0, 4, h);                                 // hedges around the edge
+  paintWallFloor(g, w, h, '#1f4a2a', '#2a6034', ['#3f8a3a', '#173a22']);                                // undergrowth under the tree wall
+  steelFence(g, w, h);
 }
 // ----- obstacle sprites (cached per map, kind, size and damage) -----
 function obstSprite(o){
@@ -667,7 +729,8 @@ function drawDepthPass(){
   if (!mapBG()){ const l3 = [{y:enemy.y, f:enemy}, {y:player.y, f:player}]; FX3.depth(it => l3.push(it)); MD.depth(it => l3.push(it)); TD.depth(it => l3.push(it)); TJ3.depth(it => l3.push(it)); ZN.depth(it => l3.push(it)); JW.depth(it => l3.push(it)); l3.sort((a, b) => a.y - b.y).forEach(it => it.f ? drawFighter(it.f) : it.fn()); return; }      // classic: flat
   const blds = OBST.filter(o => o.kind==='building'), back = [], front = [];
   const add = (it, x, y, up) => (blds.some(b => bldBehind(b, x, y, up)) ? back : front).push(it);
-  for (const o of OBST){ if (o.kind==='building' || (o.water && o.kind!=='fountain')) continue;
+  for (const o of OBST){ if (o.kind==='treewall'){ for (const t of wallTrees(o)) front.push({y:t.y, fn:() => wallTreeDraw(t)}); continue; }
+    if (o.kind==='building' || (o.water && o.kind!=='fountain')) continue;
     const it = {y: o.type==='poly' ? (o.back ? -1e9 : 1e9) : o.type==='circle' ? o.y : o.y + o.h/2, o};
     if (o.type==='poly') (o.back ? back : front).push(it); else add(it, o.x, o.y, BILL[o.kind] ? 40 : 10); }
   for (const d of DECOR[MAP] || []) back.push({y: d.y, d});
@@ -687,6 +750,7 @@ function shade(hex, k){ const n = parseInt(hex.slice(1, 7), 16), f = c => Math.m
 function poly(pts, c){ ctx.fillStyle = c; ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); ctx.fill(); }
 function drawObst3D(o){
   if (o.ice){ if (!TD.ownsObst(o)) drawObstacles(o); return; }
+  if (o.kind==='treewall') return;
   if (o.kind==='forest'){ drawForest(o); return; }
   if (o.kind==='house'){ drawHouse(o); return; }
   if (o.type==='poly'){ drawBuilding(o); return; }
@@ -1100,6 +1164,65 @@ function drawHouse(o){                              // Japanese house: plaster +
     poly([[gx - 70, gy], [gx + 70, gy], [gx, gy - 70/TILT]], '#2a2c30'); poly([[gx - 58, gy - 4], [gx + 58, gy - 4], [gx, gy - 60/TILT]], '#b8321e'); poly([[gx - 44, gy - 8], [gx + 44, gy - 8], [gx, gy - 46/TILT]], '#f1dcb2'); }
   ctx.restore();
 }
+// ---------- TREE WALLS (park + wisteria mountain): rows of big trees packed along the map edge ----------
+function wallTreeSprite(kind, seed){
+  const key = 'wt|' + kind + '|' + seed; if (key in sprCache) return sprCache[key];
+  const rr = rng(seed*977 + 13), Wd = 46, Hd = 58, c = mkCanvas(Wd, Hd); if (!c){ sprCache[key] = null; return null; }
+  const g = c.getContext('2d'), {R, P} = pixTools(g), cx = 23, mask = new Uint8Array(Wd*Hd);
+  const GREEN = ['#a4e86f', '#6fc152', '#48994a', '#2f7040', '#1f4a30'], PINE = ['#5fae6a', '#3f8a52', '#2a6740', '#1d4a33', '#143524'];
+  const BARK = kind==='wis' ? ['#7a5a48', '#4e3628'] : ['#a0662f', '#5f3a18'], pal = kind==='pine' ? PINE : GREEN;
+  R(cx - 2, 36, 5, 22, BARK[0]); R(cx + 1, 36, 2, 22, BARK[1]); R(cx - 3, 55, 7, 3, BARK[1]); R(cx - 2, 41, 1, 3, BARK[1]);
+  if (kind==='pine'){                                  // conifer: stacked wide tiers
+    for (let i=0; i<4; i++){ const y0 = 5 + i*9, hw = 8 + i*3;
+      for (let y=0; y<12; y++){ const w = Math.round(hw*(y + 1)/12); for (let x=-w; x<=w; x++){ const v = (y/12)*0.7 + (x/(hw + 1))*0.35 + rr()*0.2 - 0.1; P(cx + x, y0 + y, pal[v < 0.1 ? 0 : v < 0.35 ? 1 : v < 0.6 ? 2 : v < 0.85 ? 3 : 4]); } } }
+    return sprCache[key] = {c};
+  }
+  const blobs = [{x:cx, y:20, r:12}], nb = 8 + Math.floor(rr()*3);   // broadleaf: a cluster of round leaf blobs, lit from the top left
+  for (let i=1; i<nb; i++){ const a = rr()*6.28, d = 4 + rr()*7; blobs.push({x:cx + Math.cos(a)*d*1.1, y:21 + Math.sin(a)*d*0.8, r:7 + rr()*5}); }
+  for (const b of blobs) for (let y=Math.floor(b.y - b.r); y<=b.y + b.r; y++) for (let x=Math.floor(b.x - b.r); x<=b.x + b.r; x++){
+    const dx = (x - b.x)/b.r, dy = (y - b.y)/b.r; if (dx*dx + dy*dy > 1 || x < 0 || x >= Wd || y < 0 || y >= 42) continue;
+    const v = dy*0.7 + dx*0.3 + (rr() - 0.5)*0.35 + 0.25*(b.y - 20)/12; P(x, y, pal[v < -0.45 ? 0 : v < -0.1 ? 1 : v < 0.25 ? 2 : v < 0.6 ? 3 : 4]); mask[y*Wd + x] = 1; }
+  if (kind==='wis'){                                   // wisteria: purple strands hanging off the canopy, blossom clusters on top
+    for (let x=3; x<Wd - 3; x++){ if (rr() < 0.35) continue; let y = Hd - 1; while (y > 0 && !mask[y*Wd + x]) y--; if (y <= 2) continue;
+      const len = 4 + Math.floor(rr()*10); for (let k=1; k<=len; k++){ const yy = y + k; if (yy >= 38 && Math.abs(x - cx) < 3) break; P(x, yy, ['#e9d9ff', '#c7a6f0', '#a67fd8', '#8a5fc0'][Math.min(3, Math.floor(k/len*4))]); } }
+    for (let i=0; i<28; i++){ const x = 4 + Math.floor(rr()*(Wd - 9)), y = 3 + Math.floor(rr()*32); if (mask[y*Wd + x]){ P(x, y, '#d7b8ff'); P(x + 1, y, '#b48be0'); P(x, y + 1, '#c7a6f0'); } }
+  }
+  return sprCache[key] = {c};
+}
+function wallTrees(o){                               // lay the trees of one wall strip out once (seeded)
+  if (o.wt) return o.wt;
+  const r = rng(Math.round(o.x)*7 + Math.round(o.y)*13 + o.side.charCodeAt(0)), wt = [];
+  const kindOf = () => { const q = r(); return o.sp==='wis' ? (q < 0.82 ? 'wis' : 'pine') : (q < 0.7 ? 'oak' : 'pine'); };
+  const mk = (x, y, s) => wt.push({x, y, s:s*(0.92 + r()*0.22), kind:kindOf(), seed:Math.floor(r()*6), flip:r() < 0.5});
+  const x0 = o.x - o.w/2, x1 = o.x + o.w/2, y0 = o.y - o.h/2, y1 = o.y + o.h/2;
+  if (o.side==='t' || o.side==='b'){
+    const rows = o.side==='t' ? [y0 + 30, y0 + 75, y1 - 44] : [y0 + 175, y0 + 235, y1 - 10], sc = o.side==='t' ? 1.05 : 0.6;
+    rows.forEach((yy, ri) => { for (let x = -30 + r()*40 + ri*24; x < o.w + 40; x += 56 + r()*22) mk(x0 + x, yy + r()*6, sc); });
+  } else {
+    const cols = [x0 + (x1 - x0)*0.25, x0 + (x1 - x0)*0.55, x1 - 40];
+    cols.forEach((xx, ci) => { for (let y = y0 - 10 + r()*30 + ci*26; y < y1 + 20; y += 54 + r()*20) mk(xx + r()*10, y, 0.95); });
+  }
+  wt.sort((a, b) => a.y - b.y);
+  return o.wt = wt;
+}
+function wallTreeDraw(t){
+  const sp = wallTreeSprite(t.kind, t.seed); if (!sp) return;
+  const dw = sp.c.width*PX*t.s, dh = sp.c.height*PX*t.s/TILT, x = Math.round(t.x/PX)*PX, y = Math.round(t.y/PX)*PX;
+  if (x + dw/2 < camX - 200 || x - dw/2 > camX + VW() + 200 || y < camY - 200 || y - dh > camY + VH() + 200) return;   // off screen
+  const fade = [player, enemy].some(f => f.hp>0 && f.y < t.y - 8 && f.y > t.y - dh*0.9 && Math.abs(f.x - t.x) < dw*0.42) ? 0.4 : 1;   // see through it when a fighter stands behind
+  ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = fade;
+  ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x, y - 2, dw*0.28, dw*0.08, 0, 0, 7); ctx.fill();
+  if (t.flip){ ctx.translate(x, 0); ctx.scale(-1, 1); ctx.drawImage(sp.c, -dw/2, y - dh, dw, dh); } else ctx.drawImage(sp.c, x - dw/2, y - dh, dw, dh);
+  ctx.restore();
+}
+function paintWallFloor(g, w, h, dark, mid, specks){   // dense undergrowth under the tree walls (art pixels)
+  const {P} = pixTools(g), r = rng(41), wi = winOf(), t = Math.round(wi.t/PX), b = Math.round(wi.b/PX), l = Math.round(wi.l/PX), rt = Math.round(wi.r/PX);
+  const gy0 = MAP==='fujikasane' ? Math.round((H/2 - 130)/PX) : -1, gy1 = MAP==='fujikasane' ? Math.round((H/2 + 130)/PX) : -1, jx = v => (((v*2654435761)>>>0) % 3) - 1;
+  for (let y=0; y<h; y++) for (let x=0; x<w; x++){
+    const gap = y >= gy0 && y <= gy1;
+    if (!(y < t + jx(x) || y >= h - b + jx(x + 7) || (x < l + jx(y) && !gap) || (x >= w - rt + jx(y + 3) && !gap))) continue;
+    const n = r(); P(x, y, n < 0.12 ? specks[0] : n < 0.3 ? mid : n < 0.34 ? specks[1] : dark); }
+}
 function drawDecor(d){                              // standing torii gate, facing the camera
   if (d.kind!=='torii') return;
   const x = W*d.x, y = d.y, hgt = 150*HF, sp = 56;
@@ -1159,6 +1282,17 @@ function pushOut(f){                               // fighters are blocked by te
     }
   }
 }
+function moveSolid(e, nx, ny){                      // move in steps of at most 8px, pushing out of terrain after each: slides along props, never tunnels through thin ones
+  const dx = nx - e.x, dy = ny - e.y, n = Math.max(1, Math.ceil(Math.hypot(dx, dy)/8));
+  for (let i=0; i<n; i++){ e.x += dx/n; e.y += dy/n; pushOut(e); }
+}
+const MINION_SRC = [];                              // any module with summons / minions / pets registers a getter here, e.g. MINION_SRC.push(() => myMinions): they are then kept solid every frame
+function settleMinion(m, x0, y0){                   // after a minion moved from (x0, y0): walk the path solidly (big jumps = teleports, which just get pushed out at the end)
+  m.r = m.r || 16; const tx = m.x, ty = m.y;
+  if (Math.hypot(tx - x0, ty - y0) > 100){ m.x = Math.min(W - m.r, Math.max(m.r, tx)); m.y = Math.min(H - m.r, Math.max(m.r, ty)); pushOut(m); return; }
+  m.x = x0; m.y = y0; moveSolid(m, Math.min(W - m.r, Math.max(m.r, tx)), Math.min(H - m.r, Math.max(m.r, ty)));
+}
+function solidifyMinions(){ for (const get of MINION_SRC) for (const m of get()){ if (!m || m.fly) continue; m.r = m.r || 16; pushOut(m); } }
 function damageObst(o, dmg){                       // breakables take damage and shatter
   if (!o || !o.breakable) return;
   o.hp -= dmg;
@@ -1611,7 +1745,6 @@ function ultTick(f, dt){
   f.ult = Math.min(100, f.ult + ULT_BASE*(1 + ULT_CATCH*behind)*dt);
 }
 function hit(f, dmg, src, kx, ky){
-  if (f.__sh) return JW.hurtProxy(f, dmg, src, kx, ky);
   if (f.inv > 0 || f.hp <= 0) return;
   if (src && src.phosT>0) dmg *= 1.1;                // Todoroki Phosphor: +10% damage
   if (f.cocoon && src && !HIT_TICK){                 // Vortex cocoon: any hit breaks it; same element gets +15%
@@ -1625,9 +1758,8 @@ function hit(f, dmg, src, kx, ky){
   if (f.drT > 0) dmg *= 0.6;                         // Howitzer tornado: -40% damage taken
   if (f.id==='midoriya' && inOwnSmoke(f)) dmg *= 0.8;   // inside his own Smokescreen: -20% damage taken
   if (src && src.id==='tanjiro' && src.hino && !HIT_TICK) dmg *= HINO_DMG;   // Hinokami: fire versions hit harder
-  f.hp = Math.max(0, f.hp - dmg);
-  if (dmg > 0) hurt3(f);
-  if (src && src.id==='zenitsu' && !HIT_TICK && dmg>0 && f.inv<=0){ f.stun = Math.max(f.stun, ZEN_PARA); ZN.para(f); }   // Zenitsu: every hit paralyzes (doesn't add on top of a longer stun)
+  if (f.__sh) JW.hurtProxy(f, dmg, src); else { f.hp = Math.max(0, f.hp - dmg); if (dmg > 0) hurt3(f); }
+  if (src && src.id==='zenitsu' && !HIT_TICK && dmg>0 && f.inv<=0){ f.stun = Math.max(f.stun, ZEN_PARA); if (!f.__sh) ZN.para(f); }   // Zenitsu: every hit paralyzes (doesn't add on top of a longer stun)
   if (src && src.id==='tanjiro' && !HIT_TICK && dmg>0){
     if (src.hino) applyElem(f, 'fire', src);        // Hinokami: everything burns (same burn as Todoroki)
     src.threadT = THREAD_T;                          // Opening Thread: 3 hits in a row
@@ -1637,10 +1769,10 @@ function hit(f, dmg, src, kx, ky){
     const now = performance.now(); trainLog.push({t:now, d:dmg}); trainTotal += dmg; dummyLastHit = now;
     if (f.hp < 1) f.hp = 1;
   }
-  if (!ultBusy(f)) f.ult = Math.min(100, f.ult + dmg*ULT_TAKEN);                          // taking damage charges the ult fast
+  if (!f.__sh && !ultBusy(f)) f.ult = Math.min(100, f.ult + dmg*ULT_TAKEN);                          // taking damage charges the ult fast
   if (src && src!==f && !ultBusy(src)) src.ult = Math.min(100, src.ult + dmg*ULT_DEALT);   // dealing damage charges it a little
   if (kx) { f.kx += kx; f.ky += ky; }
-  if (dmg>0) fx.push({x:f.x, y:f.y-f.r, t:0.5, txt:'-'+(Math.round(dmg*10)/10)});
+  if (dmg>0 && !f.__sh) fx.push({x:f.x, y:f.y-f.r, t:0.5, txt:'-'+(Math.round(dmg*10)/10)});
 }
 
 // ---------- SKILLS (per character) ----------
@@ -1785,11 +1917,13 @@ const SKILLS = {
     // Q: Black Whip. Tethers an enemy within 4m: 0.7s silence on connect, then 4s of -10% speed and +20% dmg taken.
     //    Breaks past 6m or without line of sight. Q again: pull Midoriya to where the enemy was
     q:{name:'Black Whip', label:f => (f.tether && !f.tether.pulled) ? 'PULL' : 'Black Whip', cd:10, est:0, cast(f,a){
-      const tg = foe(f), d = Math.hypot(tg.x-f.x, tg.y-f.y);
-      MD.lash(f, a);   // the lash: one 360 spin round him, not aimed
-      if (tg.hp>0 && d < WHIP_CONNECT + tg.r && !losBlocked(f, tg)){
-        f.tether = {t:4};
-        if (tg.inv<=0){ tg.silT = Math.max(tg.silT||0, 1); tg.stun = Math.max(tg.stun, 1); fx.push({x:tg.x, y:tg.y-tg.r-14, t:0.7, txt:'SILENCED'}); }
+      MD.lash(f, a);   // the lash: one 360 spin round him, not aimed. It grapples EVERY enemy in range (Jin-Woo and his soldiers)
+      const real = f.team==='p' ? enemy : player, all = [real];
+      if (real.id==='jinwoo') for (const s of JW.sol) if (s.f===real && !s.dis && !s.dead && !(s.anim && s.anim.name==='summon')) all.push(JW.proxyOf(s));
+      const got = all.filter(tg => tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) < WHIP_CONNECT + tg.r && !losBlocked(f, tg));
+      if (got.length){
+        f.tether = {t:4, its: got.map(tg => tg.__sh ? {sol: tg.__sh} : {fi: tg})};
+        for (const tg of got) if (tg.inv<=0){ tg.silT = Math.max(tg.silT||0, 1); tg.stun = Math.max(tg.stun, 1); fx.push({x:tg.x, y:tg.y-tg.r-14, t:0.7, txt:'SILENCED'}); }
       }
     }},
     // W: Smoke Screen. 3s cloud around him; inside it the enemy can't see where he is
@@ -2117,9 +2251,11 @@ function losBlocked(a, b){                         // terrain or a shrine wall b
   }
   return false;
 }
+function whipRes(it){ return it.sol ? JW.proxyOf(it.sol) : it.fi; }              // a tether entry -> the live target (fighter or soldier proxy)
 function whipPull(f){                              // Q again: yank Midoriya to where the enemy was
   if (!f.tether || f.tether.pulled) return false;   // one pull per whip; the tether stays on after
-  const tg = foe(f), dx = tg.x-f.x, dy = tg.y-f.y, d = Math.hypot(dx,dy) || 1;
+  let tg = foe(f); if (f.tether.its){ let bd = -1; for (const it of f.tether.its){ const c = whipRes(it); if (!c) continue; const dd = Math.hypot(c.x-f.x, c.y-f.y); if (dd > bd){ bd = dd; tg = c; } } }   // pull goes to the FURTHEST grappled enemy
+  const dx = tg.x-f.x, dy = tg.y-f.y, d = Math.hypot(dx,dy) || 1;
   const go = Math.max(0, d - (f.r+tg.r+4));
   f.kx += dx/d*go*8; f.ky += dy/d*go*8;           // impulse that decays: travels ~go pixels
   f.tether.pulled = true; play3(f, 'q_pull', Math.atan2(dy, dx), {dur:0.36}); MD.cast(f);
@@ -2654,7 +2790,7 @@ function runAI(f, o, dt){
   if (f.dashT>0){ f.dashT -= dt; return; }
   if (f.id==='gojo' && isHidden(foe(f), f) && f.stun<=0 && f.root<=0){   // Midoriya in smoke: back away as far as possible
     const ls = f.lastSeen || o; let bx = 0, by = 0, bd = -1;
-    for (const [cx, cy] of [[60,60],[W-60,60],[60,H-60],[W-60,H-60]]){ const d = Math.hypot(cx-ls.x, cy-ls.y); if (d > bd){ bd = d; bx = cx; by = cy; } }
+    for (const [cx, cy] of [[winOf().l+60, winOf().t+60], [W-winOf().r-60, winOf().t+60], [winOf().l+60, H-winOf().b-60], [W-winOf().r-60, H-winOf().b-60]]){ const d = Math.hypot(cx-ls.x, cy-ls.y); if (d > bd){ bd = d; bx = cx; by = cy; } }
     const d = Math.hypot(bx-f.x, by-f.y) || 1; f.aim = ea;
     f.vx = (bx-f.x)/d*f.spd; f.vy = (by-f.y)/d*f.spd;
     if (dist < 160 && f.dashCd<=0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = (bx-f.x)/d*620; f.vy = (by-f.y)/d*620; }
@@ -2715,7 +2851,7 @@ function runAI(f, o, dt){
   }
   if (f.sideT>0){ f.sideT -= dt; f.vx = Math.cos(f.sideA)*f.spd; f.vy = Math.sin(f.sideA)*f.spd; }   // finish the dodge step
   if (sty.range > 60){                              // ranged: don't back into walls, slip past when cornered
-    const wall = Math.min(f.x, W-f.x, f.y, H-f.y);
+    const wi = winOf(), wall = Math.min(f.x - wi.l, W - wi.r - f.x, f.y - wi.t, H - wi.b - f.y);
     const cx = W/2-f.x, cy = H/2-f.y, cl = Math.hypot(cx,cy) || 1;
     if (wall < 140 && dir < 0){                     // retreating near a wall: bend the retreat toward open space
       const k = (140-wall)/140;
@@ -2902,9 +3038,13 @@ function update(dt){
     if (f.silT>0) f.silT -= dt; if (f.tetherT>0) f.tetherT -= dt; if (f.gearWin>0) f.gearWin -= dt; if (f.ofaT>0){ f.ofaT -= dt; f.ofaShotT -= dt; if (f.ofaShotT<=0 && f.ofaT>0 && f.stun<=0 && !f.fly){ ofaVolley(f); f.ofaShotT = 2; } }
     if (f.aaChain===1){ f.aaChainT -= dt; if (f.aaChainT<=0){ f.aaChain = 0; f.atkCd = Math.max(f.atkCd, autoCd(f) - MIDO_CHAIN); } }   // missed the 2nd auto: normal reset
     if (f.tether){                                   // Black Whip upkeep
-      const tg = foe(f); f.tether.t -= dt;
-      if (tg.hp<=0 || f.tether.t<=0 || Math.hypot(tg.x-f.x, tg.y-f.y) > WHIP_BREAK || losBlocked(f, tg)) f.tether = null;
-      else tg.tetherT = 0.1;
+      f.tether.t -= dt;
+      if (f.tether.its){
+        f.tether.its = f.tether.its.filter(it => { const c = whipRes(it); return c && c.hp>0 && !(it.sol && (it.sol.dis || it.sol.dead)) && Math.hypot(c.x-f.x, c.y-f.y) <= WHIP_BREAK && !losBlocked(f, c); });
+        if (!f.tether.its.length || f.tether.t<=0) f.tether = null; else for (const it of f.tether.its) whipRes(it).tetherT = 0.1;
+      } else { const tg = foe(f);
+        if (tg.hp<=0 || f.tether.t<=0 || Math.hypot(tg.x-f.x, tg.y-f.y) > WHIP_BREAK || losBlocked(f, tg)) f.tether = null;
+        else tg.tetherT = 0.1; }
     }
     f.vulnT -= dt; f.drT -= dt; if (f.empT>0) f.empT -= dt; if (f.lslowT>0) f.lslowT -= dt; if (f.commitT>0) f.commitT -= dt;
     ultTick(f, dt);
@@ -2916,8 +3056,8 @@ function update(dt){
     let sm = f.dashT>0 ? 1 : (f.slowT>0 ? 0.4 : f.lslowT>0 ? 0.8 : 1) * (f.howT>=0 ? 0.6 : 1) * (f.tetherT>0 ? 0.9 : 1) * (f.iceT>0 ? 0.9 : 1) * (f.phosT>0 ? 1.3 : 1) * (f.hino ? HINO_SPD : 1) * (f.wpT>0 ? WP_SPD : 1) * (f.zSlowT>0 ? f.zSlowK : 1) * (f.zHold>0 ? 0.6 : 1) * (f.frost ? 0.8 : 1) * (f.ofaT>0 ? 1 + GEAR_BONUS[f.gear||1] : 1) * (f.id==='midoriya' && zones.some(z => z.kind==='smoke' && z.src===f && Math.hypot(f.x-z.x, f.y-z.y) < z.r) ? 1.2 : 1);   // dashes ignore slows; Midoriya +20% in his smoke
     if (f.asleep && sm < 1) sm = 1;                  // Zenitsu asleep: his movement speed can't be reduced
     if (botControlled(f) && f.dashT<=0) steerAround(f);
-    f.x = Math.min(W-f.r, Math.max(f.r, f.x + (f.vx*sm+f.kx)*dt));
-    f.y = Math.min(H-f.r, Math.max(f.r, f.y + (f.vy*sm+f.ky)*dt));
+    { const tx = Math.min(W-f.r, Math.max(f.r, f.x + (f.vx*sm+f.kx)*dt)), ty = Math.min(H-f.r, Math.max(f.r, f.y + (f.vy*sm+f.ky)*dt));
+      if (Math.hypot(tx - f.x, ty - f.y) > 10) moveSolid(f, tx, ty); else { f.x = tx; f.y = ty; } }   // dashes / knockback: stepped so they can't skip a thin prop
     pushOut(f);
     if (f.tpCd>0) f.tpCd -= dt; streetWarp(f);         // Shibuya: streets wrap around
     if (infD0){ const dx = f.x-gi.x, dy = f.y-gi.y, d1 = Math.hypot(dx,dy)||1, lim = Math.min(infD0, INF_R + f.r);
@@ -3070,7 +3210,9 @@ function update(dt){
       if (!b.pierce) b.life = 0;
     }
     let ob = null;                                 // terrain: stops shots; crates take damage (Todoroki's own shots pass his ice)
-    if (b.life>0) for (const o of OBST) if (!o.water && !(o.ice && o.owner===b.src) && inObst(o, b.x, b.y, b.r)){ ob = o; break; }   // shots fly over water
+    if (b.life>0){ const x0 = b.x - b.vx*dt, y0 = b.y - b.vy*dt, ns = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy)*dt/10));   // sample along the step: fast shots can't skip a thin prop
+      for (let k=1; k<=ns && !ob; k++){ const sx = x0 + (b.x - x0)*k/ns, sy = y0 + (b.y - y0)*k/ns;
+        for (const o of OBST) if (!o.water && !(o.ice && o.owner===b.src) && inObst(o, sx, sy, b.r)){ ob = o; if (!b.ghost){ b.x = sx; b.y = sy; } break; } } }   // shots fly over water
     if (ob && b.ghost){ if (!b.walled){ b.walled = true; b.dmg *= 0.5; } ob = null; }   // Hell Spider: passes through terrain, half damage after
     if (ob){
       if (ob.breakable){
@@ -3082,6 +3224,7 @@ function update(dt){
     if (b.life<=0 || b.x<0 || b.x>W || b.y<0 || b.y>H){ if (b.onEnd) b.onEnd(b); bullets.splice(i,1); }
   }
   for (const u of [player, enemy]) if (!u.fly){ pushOut(u); pushOut(u); }   // last word: nobody ends a frame inside terrain or ice
+  solidifyMinions();                                // ...and neither do minions / shadows
   for (let i=fx.length-1;i>=0;i--){ fx[i].t -= dt; fx[i].y -= 30*dt; if (fx[i].t<=0) fx.splice(i,1); }
 }
 
@@ -3863,10 +4006,11 @@ const MD = (() => {
   function depth(push){
     if (!has) return;
     for (const f of [player, enemy]){
-      if (f.id !== 'midoriya' || !f.tether) continue; const tg = foe(f);
-      if (typeof isHidden === 'function' && isHidden(f, tg) && f !== player && !bots) continue;
-      const wr = Math.min(1, (f.tether.w || 0) / 0.35);
-      push({y: tg.y - 1, fn: () => drawCoil(f, tg, false, wr)}); push({y: tg.y + 1, fn: () => drawCoil(f, tg, true, wr)}); push({y: f.y + 1, fn: () => drawRope(f, tg, wr)});
+      if (f.id !== 'midoriya' || !f.tether) continue;
+      for (const tg of (f.tether.its ? f.tether.its.map(whipRes).filter(Boolean) : [foe(f)])){
+        if (typeof isHidden === 'function' && isHidden(f, tg) && f !== player && !bots) continue;
+        const wr = Math.min(1, (f.tether.w || 0) / 0.35);
+        push({y: tg.y - 1, fn: () => drawCoil(f, tg, false, wr)}); push({y: tg.y + 1, fn: () => drawCoil(f, tg, true, wr)}); push({y: f.y + 1, fn: () => drawRope(f, tg, wr)}); }
     }
     for (const z of zones) if (z.kind === 'smoke' && z.pf) push({y: -1e9, fn: () => puffs(z)});   // under everyone: nobody gets harder to see
     for (const l of lashes){ push({y: l.f.y - 1, fn: () => drawLash(l, 'back')}); push({y: l.f.y + 2, fn: () => drawLash(l, 'front')}); }
@@ -4235,7 +4379,7 @@ const JW = (() => {
   function pos2and10(f, slot){ const a = ang(f, foe(f)) + (slot === 1 ? -1 : 1) * Math.PI / 3; return ringPoint(f, 90, a); }
   function hurtSol(s, dmg, b){                // enemy damage on a shadow: HP bar, Beru dodge, Iron halves piercing hits
     if (s.dis || s.dead || s.anim && s.anim.name === 'summon') return;
-    if (s.id === 'beru' && s.dodge <= 0){ s.dodge = DODGE_CD; const tg = foe(s.f); s.tpT = 0.12; s.tpTo = tpSpot(tg); fx.push({x: s.x, y: s.y - 40, t: 0.6, txt: 'DODGE'}); return; }
+    if (s.id === 'beru' && s.dodge <= 0 && !(s.st && (s.st.stun > 0 || s.st.silT > 0 || s.st.cocoon))){ s.dodge = DODGE_CD; const tg = foe(s.f); s.tpT = 0.12; s.tpTo = tpSpot(tg); fx.push({x: s.x, y: s.y - 40, t: 0.6, txt: 'DODGE'}); return; }
     if (s.id === 'iron' && b && b.pierce && !b.jwHalf){ b.jwHalf = true; b.dmg *= 0.5; }
     s.hp -= dmg; fx.push({x: s.x, y: s.y - 36, t: 0.5, txt: '-' + (Math.round(dmg * 10) / 10)});
     if (s.hp <= 0) dissipate(s);
@@ -4282,15 +4426,21 @@ const JW = (() => {
     const f = s.f, tg = foe(f);
     if (s.kvx || s.kvy){ s.x += s.kvx * dt; s.y += s.kvy * dt; const dk = Math.exp(-7 * dt); s.kvx *= dk; s.kvy *= dk; if (Math.hypot(s.kvx, s.kvy) < 5) s.kvx = s.kvy = 0; s.x = Math.max(20, Math.min(W - 20, s.x)); s.y = Math.max(20, Math.min(H - 20, s.y)); }
     if (s.px && (s.px.kx || s.px.ky)){ s.kvx = (s.kvx || 0) + s.px.kx; s.kvy = (s.kvy || 0) + s.px.ky; s.px.kx = s.px.ky = 0; }
+    const st = s.st || (s.st = {}); for (const k of ['stun', 'root', 'slowT', 'vulnT', 'tetherT', 'wpT', 'infT', 'drT', 'silT', 'iceT', 'burnT', 'knockT', 'lslowT', 'empT']) if (st[k] > 0) st[k] -= dt;
+    if (st.cocoon){ st.cocoon.t -= dt; if (st.cocoon.t <= 0){ st.cocoon = null; st.stun = 0; } }
+    if (st.burnT > 0 && !s.dis){ s.burnTick = (s.burnTick || 0) - dt; if (s.burnTick <= 0){ s.burnTick = 0.25; const px = proxyOf(s); HIT_TICK = true; hit(px, BURN_TICK, px.burnSrc); HIT_TICK = false; } }
+    const stunned = st.stun > 0 || !!st.cocoon, mul = (st.slowT > 0 ? 0.4 : st.lslowT > 0 ? 0.8 : 1) * (st.tetherT > 0 ? 0.9 : 1) * (st.iceT > 0 ? 0.9 : 1), rooted = st.root > 0;
+    if (stunned){ s.pend = null; s.go = null; }
     s.t += dt; s.atk -= dt; if (s.wing > 0){ s.wing -= dt; const jw = s.f, tg2 = foe(jw); if (jw.hp > 0 && tg2.hp > 0 && Math.hypot(tg2.x - s.x, tg2.y - s.y) < 150 && jw.ult < 100) jw.ult = Math.min(100, jw.ult + AURA_FILL * dt); if (tg2.hp > 0 && Math.hypot(tg2.x - s.x, tg2.y - s.y) < 150) jw.jwFeed = 0.1; }  // wings out: Beru's own small aura feeds the bar
     s.t += 0; s.dodge = Math.max(0, s.dodge - dt); s.lunge = Math.max(0, s.lunge - dt);
     if (s.anim){ s.anim.t += dt; if (Math.floor(s.anim.t * s.anim.fps) >= s.anim.n){ const d = s.anim.done; s.anim = null; d && d(); } }
     s.life -= dt; if (s.life <= 0 && !s.dis) dissipate(s);
     if (s.tpT >= 0){ s.tpT -= dt; if (s.tpT < 0 && s.tpTo){ s.x = s.tpTo.x; s.y = s.tpTo.y; s.tpTo = null; s.wing = 1.0; fx.push({x: s.x, y: s.y - 20, t: 0.3, txt: '~'}); } }
     if (s.pend){ s.pend.t -= dt; if (s.pend.t <= 0){ const fn = s.pend.fn; s.pend = null; if (!s.dis && tg.hp > 0) fn(); } }
-    const busy = !!s.anim || s.dis, step = (x, y, spd) => { const dx = x - s.x, dy = y - s.y, L = Math.hypot(dx, dy); if (L < 6) return false; const m = Math.min(L, spd * dt); s.x += dx / L * m; s.y += dy / L * m; s.dir = dir8(dx, dy); s.mv = true; return true; };
+    const busy = !!s.anim || s.dis, step = (x, y, spd) => { const dx = x - s.x, dy = y - s.y, L = Math.hypot(dx, dy); if (L < 6) return false; if (rooted){ s.mv = false; return true; } const m = Math.min(L, spd * dt * mul); s.x += dx / L * m; s.y += dy / L * m; s.dir = dir8(dx, dy); s.mv = true; return true; };
     s.mv = false;
     if (busy) return;
+    if (stunned) return;
     if (s.go){ if (!step(s.go.x, s.go.y, s.spd)) s.go = null; return; }
     const d = Math.hypot(tg.x - s.x, tg.y - s.y);
     if (tg.hp > 0 && d > 0){
@@ -4303,7 +4453,7 @@ const JW = (() => {
       if (!s.mv && !s.go) s.dir = dir8(tg.x - s.x, tg.y - s.y);
     }
     if (s.chase && !(tg.jwMark > 0)) s.chase = false;
-    if (tg.hp <= 0 || s.atk > 0) return;
+    if (tg.hp <= 0 || s.atk > 0 || st.silT > 0) return;
     const a = ang(s, tg);
     const strike = (delay, fps, fn) => { s.dir = dir8(tg.x - s.x, tg.y - s.y); play(s, 'attack', fps); s.pend = {t: delay, fn}; };
     if (s.id === 'shadow' && d < 60 + tg.r){
@@ -4356,7 +4506,8 @@ const JW = (() => {
         for (const s of mine(f)){ if (b.hit && b.hit.has(s)) continue; if (Math.hypot(b.x - s.x, b.y - s.y) < 22 + b.r){ if (b.hit) b.hit.add(s); if (!(f.jwBar > 0)) hurtSol(s, b.dmg, b); if (!b.pierce) b.life = 0; break; } } }
     }
     for (const f of [player, enemy]) if (f.jwMark > 0) f.jwMark -= dt;
-    for (const s of sol) updateSol(s, dt);
+    if (!sol.reg){ sol.reg = 1; MINION_SRC.push(() => sol); }
+    for (const s of sol){ const x0 = s.x, y0 = s.y; updateSol(s, dt); settleMinion(s, x0, y0); }
     for (let i = sol.length - 1; i >= 0; i--) if (sol[i].dead || sol[i].f.hp <= 0) sol.splice(i, 1);
   }
   // ---- drawing ----
@@ -4394,7 +4545,8 @@ const JW = (() => {
       if (s.id === 'beru' && s.wing > 0) drawWings(s);
       if (s.tpT >= 0 && s.tpTo) ctx.globalAlpha = 0.35;
       ctx.drawImage(A.img, fr * S.FW, row * S.FH, S.FW, S.FH, -S.FW / 2, -S.GY, S.FW, S.FH);
-      if (!s.dis){ const bw = s.id === 'iron' ? 40 : 30, k = Math.max(0, s.hp / s.max); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(-bw / 2 - 1, -S.GY - 9, bw + 2, 6); ctx.fillStyle = k > 0.35 ? '#a56bff' : '#ff6b9a'; ctx.fillRect(-bw / 2, -S.GY - 8, bw * k, 4); }
+      if (!s.dis){ const bw = s.id === 'iron' ? 40 : 30, k = Math.max(0, s.hp / s.max); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(-bw / 2 - 1, -S.GY - 9, bw + 2, 6); ctx.fillStyle = k > 0.35 ? '#a56bff' : '#ff6b9a'; ctx.fillRect(-bw / 2, -S.GY - 8, bw * k, 4);
+        const sx = s.st || {}, pips = [[sx.stun > 0 || sx.cocoon, '#ffe066'], [sx.root > 0, '#b07a4a'], [sx.slowT > 0 || sx.iceT > 0, '#6ac6ff'], [sx.silT > 0, '#ff9ad5'], [sx.vulnT > 0 || sx.tetherT > 0, '#ff5a5a'], [sx.burnT > 0, '#ff9a1f']].filter(p => p[0]); pips.forEach((p, i) => { ctx.fillStyle = p[1]; ctx.fillRect(-bw / 2 + i * 7, -S.GY - 16, 5, 5); }); }
     });
   }
   function drawBarrier(f){
@@ -4510,9 +4662,12 @@ const JW = (() => {
   }
   // ---- retargeting: an enemy's foe(f) can be a shadow instead of Jin-Woo, so EVERY skill's own geometry hits shadows (hit() on a proxy lands in hurtSol) ----
   const angd = (a, b) => { let d = Math.abs(a - b) % (2 * Math.PI); return d > Math.PI ? 2 * Math.PI - d : d; };
+  const ST_KEYS = ['stun', 'root', 'slowT', 'vulnT', 'tetherT', 'wpT', 'infT', 'drT', 'silT', 'iceT', 'burnT', 'knockT', 'lslowT', 'empT', 'kx', 'ky', 'cocoon'];
   function proxyOf(s){
-    const p = s.px || (s.px = Object.create(s.f)); p.__sh = s; p.x = s.x; p.y = s.y; p.vx = p.vy = 0; p.hp = Math.max(0.01, s.hp); p.max = s.max; p.r = 20; p.w = 40; p.h = 40; p.inv = s.dis ? 9 : 0;
-    p.stun = p.root = p.slowT = p.vulnT = p.tetherT = p.wpT = p.infT = p.drT = 0; p.cocoon = null; p.tether = null; p.kx = p.ky = 0; p.ult = 0; return p;
+    if (!s.px){ const p0 = Object.create(s.f); s.st = s.st || {};      // status fields live on the soldier: whatever a skill writes to the proxy sticks
+      for (const k of ST_KEYS) Object.defineProperty(p0, k, {get: () => s.st[k] || (k === 'cocoon' ? null : 0), set: v => { s.st[k] = v; }, configurable: true, enumerable: true});
+      s.px = p0; }
+    const p = s.px; p.__sh = s; p.x = s.x; p.y = s.y; p.vx = p.vy = 0; p.hp = Math.max(0.01, s.hp); p.max = s.max; p.r = 20; p.w = 40; p.h = 40; p.inv = s.dis ? 9 : 0; p.tether = null; p.ult = 0; return p;
   }
   function botPick(f, jw, alive){             // who a bot goes after: Beru first, divers clear Igris, slow champs kill Iron, fast ones ignore Iron, anyone pokes shadows when Jin-Woo is not pressing
     const near = list => { let b = null, bd = 1e9; for (const s of list){ const d = Math.hypot(s.x - f.x, s.y - f.y); if (d < bd){ bd = d; b = s; } } return b; };
@@ -4538,7 +4693,7 @@ const JW = (() => {
     for (const s of alive){ if (angd(f.aim, Math.atan2(s.y - f.y, s.x - f.x)) > 0.6 + Math.atan2(20, Math.hypot(s.x - f.x, s.y - f.y) || 1)) continue; const v = sc(s.x, s.y, 20); if (v < js && v < bs){ bs = v; best = s; } }
     return best ? proxyOf(best) : jw;
   }
-  function hurtProxy(p, dmg, src, kx, ky){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); if (kx || ky){ s.kvx = (s.kvx || 0) + kx; s.kvy = (s.kvy || 0) + ky; } }
+  function hurtProxy(p, dmg, src){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); }
   function reset(){ sol.length = 0; slashes.length = 0; craters.length = 0; }
   return {sol, proxyOf, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
 })();
@@ -4851,7 +5006,7 @@ function drawMinimap(){                            // small map of the whole are
   ctx.fillStyle = 'rgba(5,10,30,.75)'; ctx.fillRect(mx-2, my-2, mw+4, mh+4);
   ctx.fillStyle = MAP_GROUND[MAP] || '#2a5624'; ctx.fillRect(mx, my, mw, mh);
   for (const o of OBST){ ctx.fillStyle = o.water ? '#2f6ca6' : o.kind==='bigtree' ? '#9a6bd0' : o.breakable ? '#8a5a2b' : '#777d86';
-    if (o.type==='poly'){ ctx.fillStyle = o.kind==='forest' ? '#2a1f33' : o.kind==='house' ? '#7a4a3a' : '#4a4d57'; ctx.beginPath(); o.pts.forEach(([x, y], i) => i ? ctx.lineTo(mx+x*k, my+y*k) : ctx.moveTo(mx+x*k, my+y*k)); ctx.closePath(); ctx.fill(); }
+    if (o.type==='poly'){ ctx.fillStyle = o.kind==='treewall' ? (o.sp==='wis' ? '#3a2a52' : '#2a5a30') : o.kind==='forest' ? '#2a1f33' : o.kind==='house' ? '#7a4a3a' : '#4a4d57'; ctx.beginPath(); o.pts.forEach(([x, y], i) => i ? ctx.lineTo(mx+x*k, my+y*k) : ctx.moveTo(mx+x*k, my+y*k)); ctx.closePath(); ctx.fill(); }
     else if (o.type==='circle'){ ctx.beginPath(); ctx.arc(mx+o.x*k, my+o.y*k, Math.max(1.5, o.r*k), 0, 7); ctx.fill(); }
     else ctx.fillRect(mx+(o.x-o.w/2)*k, my+(o.y-o.h/2)*k, o.w*k, o.h*k); }
   ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(mx+camX*k, my+camY*k, VW()*k, VH()*k);
