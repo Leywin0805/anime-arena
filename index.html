@@ -323,11 +323,17 @@ cv.addEventListener('mousedown', e => {
   demo = null;
   mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
   if (e.button === 2){ if (player.aimK){ player.aimK = null; return; }   // right click while aiming = cancel
-    player.focus = enemy.hp>0 && Math.hypot(mouse.x-enemy.x, mouse.y-enemy.y) < enemy.r+30;
+    player.focus = enemy.hp>0 && Math.hypot(mouse.x-enemy.x, mouse.y-enemy.y) < enemy.r+60;
     moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'}); }
   else mouse.down = true;
 });
-addEventListener('mouseup', e => { if (e.button !== 2) mouse.down = false; });
+addEventListener('mouseup', e => { if (e.button === 0){ const was = mouse.down; mouse.down = false; if (was && !bots && !demo && !ended) aaRelease(); } });
+function aaRelease(){                                 // left click: hold shows the auto range, release attacks
+  const f = player; if (f.hp<=0 || f.howT>=0 || f.aimK || enemy.hp<=0) return;
+  const mx = mouse.sx/CAM_Z + camX, my = mouse.sy/(CAM_Z*TILT) + camY;
+  if (inAAR(f, enemy)){ f.aaQ = 0.4; f.focus = false; moveTarget = null; }                      // in range: stop and swing
+  else if (Math.hypot(mx-enemy.x, my-enemy.y) < enemy.r+60){ f.focus = true; f.aaQ = 0; }       // clicked him from afar: walk up, then swing
+}
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
 function makeFighter(id, x, y, team){
@@ -1307,7 +1313,7 @@ function doAutoNow(f){                            // swing + set the auto cooldo
 }
 // ---------- LEAGUE-STYLE AIMING: auto attack windup (0.8s, rooted, guaranteed hit) + hold-to-aim / release-to-cast ----------
 var AA_FORCE = false, AA_NOANIM = false, AA_FIT = 0;
-const AA_WIND = 0.8, AA_RE = /^(auto|cleave)/;
+const AA_WIND = 0.5, AA_RE = /^(auto|cleave)/;
 const aimA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a))*255).toString(16).padStart(2, '0');
 function aaReach(f){ return f.id==='todoroki' ? 170 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
 function inAAR(f, tg){ return !!tg && tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) <= aaReach(f) + tg.r; }
@@ -1498,7 +1504,7 @@ function drawAimLayer(){                            // auto attack ring + windup
       ctx.setLineDash([]); ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(tx, ty, w.tgt.r + 4 + (1-p)*22, 0, 7); ctx.stroke(); }
     ctx.restore();
   }
-  if (!bots && player.hp>0){
+  if (!bots && player.hp>0 && mouse.down && !player.aimK){
     const R = aaReach(player) + enemy.r, hot = inAAR(player, enemy), col = hot ? '#ff6a6a' : '#ffffff';
     ctx.save(); ctx.beginPath(); ctx.arc(player.x, player.y, R, 0, 7); ctx.fillStyle = aimA(col, hot ? .07 : .03); ctx.fill();
     ctx.setLineDash([14, 10]); ctx.lineDashOffset = -T*30; ctx.strokeStyle = aimA(col, hot ? .9 : .5); ctx.lineWidth = 2; ctx.shadowColor = col; ctx.shadowBlur = hot ? 14 : 6; ctx.stroke(); ctx.restore();
@@ -2839,7 +2845,7 @@ function update(dt){
   else { player.vx = dx*player.spd; player.vy = dy*player.spd; }
   aimInput(player);                                 // hold = indicator, release = cast
   if (player.howT>=0){ if (mouse.down){ mouse.down = false; howLaunch(player, mouse.x, mouse.y); } }
-  else if ((mouse.down || player.focus) && !dx && !dy && !player.aimK && player.hp>0 && !stunned && !player.fly){ startAA(player); }
+  else if (((player.focus && !dx && !dy) || player.aaQ>0) && !player.aimK && player.hp>0 && !stunned && !player.fly){ if (player.aaQ>0) player.aaQ -= dt; if (startAA(player)) player.aaQ = 0; }
   }
 
   if (training){
