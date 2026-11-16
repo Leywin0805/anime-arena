@@ -183,6 +183,10 @@
 #menu .kcol .knote{margin-bottom:10px}
 
 #menu .drow{height:42px;margin-bottom:10px} #menu .kpage{margin-top:30px}
+
+  #menu .legal{position:absolute;left:18px;bottom:22px;display:flex;gap:16px;font-size:8px;letter-spacing:1px;z-index:2} #menu .legal a{color:#d9d4ff;text-decoration:none;text-shadow:1px 1px 0 #0a0630,0 0 6px #0a0630} #menu .legal a:hover{color:#5ff0ff}
+  #menu.scr-settings .stabs{position:absolute;left:30px;top:84px;width:176px;flex-direction:column;gap:10px;padding:0;justify-content:flex-start} #menu.scr-settings .stabs button{width:176px}
+  #menu.scr-settings .kcols{margin-left:222px;padding:24px 20px 0 0;gap:14px} #menu.scr-settings .kpage{margin:30px 0 0 240px;width:560px}
 </style>
 </head>
 <body>
@@ -5858,7 +5862,7 @@ const MENU = (() => {
   addEventListener('contextmenu', e => { if (S.bind && MOUSEOK[S.bind]) e.preventDefault(); }, true);
   const saveProf = () => { try { localStorage.setItem('aa_profile', JSON.stringify(PROF)); } catch (e) {} };
   const saveDisp = () => { try { localStorage.setItem('aa_disp', JSON.stringify(DISP)); } catch (e) {} };
-  const applyDisp = () => { cv.style.filter = DISP.bright === 100 ? '' : 'brightness(' + DISP.bright / 100 + ')'; };
+  const applyDisp = () => { const fl = DISP.bright === 100 ? '' : 'brightness(' + DISP.bright / 100 + ')'; cv.style.filter = fl; $m.style.filter = fl; $b.style.filter = fl; };   // game, menus and the menu button
   applyDisp();
   const HCOLS = ['#ff3b3b', '#ff9a1f', '#ffe45e', '#4dff7a', '#3ff0ff', '#4d8bff', '#ff5fe0', '#ffffff'];
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
@@ -5995,6 +5999,7 @@ const MENU = (() => {
         <button class="big view" data-go="view"><b>CHARACTERS</b></button>
       </div>
       <button class="cfgbtn" data-go="settings">SETTINGS</button>
+      <div class="legal"><a href="about.html" target="_blank" rel="noopener">ABOUT</a><a href="privacy.html" target="_blank" rel="noopener">PRIVACY</a><a href="terms.html" target="_blank" rel="noopener">TERMS</a><a href="contact.html" target="_blank" rel="noopener">CONTACT</a></div>
       </div>`,
     settings: () => {
       const row = (a, lab) => `<div class="krw"><span>${lab}</span><button class="kc${S.bind === a ? ' on' : ''}" data-bind="${a}">${S.bind === a ? (MOUSEOK[a] ? 'KEY OR CLICK' : 'PRESS A KEY') : kbName(KB[a])}</button></div>`;
@@ -6005,10 +6010,10 @@ const MENU = (() => {
           <div class="kcol"><label>MOVEMENT</label>${row('up', 'UP')}${row('down', 'DOWN')}${row('left', 'LEFT')}${row('right', 'RIGHT')}${row('dash', 'DASH')}</div>
           <div class="kcol"><label>ABILITIES</label>${row('q', 'SKILL Q')}${row('w', 'SKILL W')}${row('e', 'SKILL E')}${row('r', 'ULT R')}</div>
           <div class="kcol"><label>MOUSE</label>${row('aa', 'ATTACK')}${row('mv', 'MOVE')}<div class="knote">AIM WITH THE MOUSE<br>ATTACK / MOVE: ANY KEY<br>OR MOUSE BUTTON</div></div></div>
-          <div class="kfix">${S.msg || 'CLICK A BUTTON, THEN PRESS THE NEW KEY  -  ESC CANCELS'}</div>`;
+          ${S.msg ? `<div class="kfix">${S.msg}</div>` : ''}`;
         foot = `<div class="opts"><button class="start" data-act="resetKeys">RESET DEFAULTS</button></div>`;
       } else if (S.tab === 'profile'){
-        body = `<div class="kpage"><label>ALIAS</label><input id="alias" class="tin" maxlength="14" spellcheck="false" autocomplete="off" placeholder="YOUR NAME" value="${PROF.alias.replace(/"/g, '')}"><div class="knote">SHOWN ON YOUR HEALTH BAR  -  14 LETTERS MAX</div></div>`;
+        body = `<div class="kpage"><label>ALIAS</label><input id="alias" class="tin" spellcheck="false" autocomplete="off" placeholder="YOUR NAME" value="${PROF.alias.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}"><div class="knote" id="aliasmsg" style="color:#ff6b6b;min-height:14px"></div></div>`;
       } else if (S.tab === 'display'){
         body = `<div class="kpage">
           <div class="drow"><span>BRIGHTNESS</span><input id="bright" class="sld" type="range" min="50" max="150" step="5" value="${DISP.bright}"><b id="brightv">${DISP.bright}%</b></div>
@@ -6023,7 +6028,7 @@ const MENU = (() => {
           <div class="drow"><span>SOUND EFFECTS</span>${seg('sfx', [['1', 'ON'], ['0', 'OFF']], AUD.A.sx ? '1' : '0')}</div>
           <div class="drow"><span>SFX VOLUME</span><input id="sfxvol" class="sld" type="range" min="0" max="100" step="5" value="${AUD.A.sv}"><b id="sfxvolv">${AUD.A.sv}%</b></div>
           <div class="drow"><span>VOICE LINES</span>${seg('vox', [['1', 'ON'], ['0', 'OFF']], AUD.A.vx ? '1' : '0')}</div>
-          <div class="drow"><span>VOICE VOLUME</span><input id="voxvol" class="sld" type="range" min="0" max="100" step="5" value="${AUD.A.vv}"><b id="voxvolv">${AUD.A.vv}%</b></div><div class="drow" style="font-size:11px;opacity:.7;white-space:normal">Voices: VOICEVOX:玄野武宏 / VOICEVOX:白上虎太郎 / VOICEVOX:青山龍星</div></div>`;
+          <div class="drow"><span>VOICE VOLUME</span><input id="voxvol" class="sld" type="range" min="0" max="100" step="5" value="${AUD.A.vv}"><b id="voxvolv">${AUD.A.vv}%</b></div></div>`;
       }
       return `${head('SETTINGS')}<div class="stabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${foot}`; },
     pve: stepHTML, pvp: stepHTML, train: stepHTML
@@ -6188,7 +6193,7 @@ const MENU = (() => {
     else if (a === 'create'){ S.code = ''; paint(); } else if (a === 'join'){ const i = document.getElementById('code'); if (i) S.code = i.value.toUpperCase(); }
   });
   $m.addEventListener('input', e => {
-    if (e.target.id === 'alias'){ PROF.alias = e.target.value.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 14); if (PROF.alias !== e.target.value) e.target.value = PROF.alias; saveProf(); }
+    if (e.target.id === 'alias'){ const v = e.target.value, am = document.getElementById('aliasmsg'); if (v.length > 14){ if (am) am.textContent = '14 CHARACTERS MAX'; } else { PROF.alias = v; saveProf(); if (am) am.textContent = ''; } }
     else if (e.target.id === 'voxvol'){ AUD.set('vv', +e.target.value); document.getElementById('voxvolv').textContent = AUD.A.vv + '%'; }
     else if (e.target.id === 'sfxvol'){ AUD.set('sv', +e.target.value); document.getElementById('sfxvolv').textContent = AUD.A.sv + '%'; }
     else if (e.target.id === 'musvol'){ AUD.set('vol', +e.target.value); document.getElementById('musvolv').textContent = AUD.A.vol + '%'; }
