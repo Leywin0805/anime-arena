@@ -1600,7 +1600,7 @@ function VOX(f, slot){
   if (typeof AUD === 'undefined' || MENU.open || bots || f.__sh || !slot) return;
   const k = f.team + f.id + slot;
   if ((VOXN[k] || 0) >= VOX_CAP || Math.random() >= VOX_CHANCE) return;
-  if (AUD.voice(f.id, slot, {soft:true, ch:f.team})) VOXN[k] = (VOXN[k] || 0) + 1;
+  if (AUD.voice(f.id, slot, {soft:true, ch:f.team, rate:1.2})) VOXN[k] = (VOXN[k] || 0) + 1;
 }
 function voxSlot(f, key){
   if (key==='r'){
@@ -5730,7 +5730,8 @@ const AUD = (() => {
   let jaVoice = null, vAudio = null;
   const findVoice = () => { try { const vs = speechSynthesis.getVoices(); jaVoice = vs.find(v => /^ja/i.test(v.lang)) || null; } catch (e) {} };
   try { findVoice(); speechSynthesis.addEventListener('voiceschanged', findVoice); } catch (e) {}
-  const vCache = {}, vCh = {};                                                    // vCh: one playing line per channel (menu = 'menu', in a match = the fighter's team)
+  const vCache = {}, vCh = {}; let vg = null;                                    // vg: shared voice gain (voices are boosted a little, then limited)
+  const VBOOST = 1.3;                                                    // vCh: one playing line per channel (menu = 'menu', in a match = the fighter's team)
   const vBusy = ch => { const au = vCh[ch]; return !!au && !au.paused && !au.ended; };
   function voice(id, slot, o){                                                    // slot: pick (default), q, w, e, r ... ; o.soft = drop if this channel is still speaking; o.ch = channel; o.delay = ms
     slot = slot || 'pick'; o = o || {};
@@ -5743,7 +5744,9 @@ const AUD = (() => {
     try { speechSynthesis.cancel(); if (vCh[ch]){ vCh[ch].pause(); vCh[ch] = null; } } catch (e) {}
     if (src){
       const key = id + '/' + slot, au = vCh[ch] = vCache[key] || (vCache[key] = new Audio(src));
-      au.volume = A.vv / 100;
+      au.playbackRate = o.rate || 1;
+      if (ctx){ try { if (!vg){ vg = ctx.createGain(); vg.connect(limiter(ctx, ctx.destination)); } if (!au._src){ au._src = ctx.createMediaElementSource(au); au._src.connect(vg); } vg.gain.value = A.vv / 100 * VBOOST; au.volume = 1; } catch (e) { au.volume = Math.min(1, A.vv / 100); } }
+      else au.volume = Math.min(1, A.vv / 100);
       const go = () => { if (vCh[ch] === au){ try { au.currentTime = 0; } catch (e) {} au.play().catch(() => {}); } };
       const dl = o.delay != null ? o.delay : (slot === 'pick' ? 160 : 0);
       if (dl > 0) setTimeout(go, dl); else go();
@@ -5752,6 +5755,7 @@ const AUD = (() => {
     try { const [txt, pitch, rate] = VOICE[id], u = new SpeechSynthesisUtterance(txt); u.lang = 'ja-JP'; if (jaVoice) u.voice = jaVoice; u.pitch = pitch; u.rate = rate; u.volume = A.vv / 100; setTimeout(() => speechSynthesis.speak(u), 380); } catch (e) {}
     return true;
   }
+  function stopVoice(ch){ ch = ch || 'menu'; try { speechSynthesis.cancel(); } catch (e) {} if (vCh[ch]){ try { vCh[ch].pause(); } catch (e) {} vCh[ch] = null; } }
   const barDur = tr => 16 * 60 / tr.bpm / 4;
   let ctx = null, mg = null, cur = null, rg = null, barI = 0, nextT = 0;
   function startTrack(){
@@ -5770,9 +5774,9 @@ const AUD = (() => {
   document.addEventListener('visibilitychange', () => { if (!ctx) return; if (document.hidden) ctx.suspend(); else ctx.resume(); });
   const save = () => { try { localStorage.setItem('aa_audio', JSON.stringify(A)); } catch (e) {} };
   return {
-    A, TR, SFX, VOICE, bar, rig, barDur, sfx, voice, limiter,
+    A, TR, SFX, VOICE, bar, rig, barDur, sfx, voice, stopVoice, limiter,
     play(name){ if (name === cur) return; cur = name; startTrack(); },
-    set(k, v){ A[k] = v; save(); level(); if (k === 'on' || (k === 'vol' && !rg)) startTrack(); }
+    set(k, v){ A[k] = v; save(); level(); if (k === 'vv' && vg) vg.gain.value = A.vv / 100 * VBOOST; if (k === 'on' || (k === 'vol' && !rg)) startTrack(); }
   };
 })();
 // ---------- fighter info shown in the CHARACTERS viewer: [what it does (numbers match the game code), lore] ----------
@@ -6033,7 +6037,9 @@ const MENU = (() => {
       return `${head('SETTINGS')}<div class="stabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${foot}`; },
     pve: stepHTML, pvp: stepHTML, train: stepHTML
   };
+  let lastScr = '';
   function paint(){
+    const sk = S.screen + ':' + (S.step || '') + ':' + S.open; if (sk !== lastScr){ if (lastScr) AUD.stopVoice('menu'); lastScr = sk; }   // leaving a screen (or starting the match) cuts the pick / ability line
     $m.className = 'scr-' + S.screen + ' step-' + (S.step || 'x') + (viewing() ? ' pk' : '') + (MODES[S.screen] && S.step === 'opts' ? ' st' : ''); $m.innerHTML = '<div id="mbox">' + SCREENS[S.screen]() + '</div>' + stageHTML(); drawLogo(); $m.style.display = S.open ? 'block' : 'none'; AUD.play(!S.open ? 'battle' : viewing() ? 'select' : 'lobby'); $b.style.display = !S.open && !locked() ? 'block' : 'none'; tick();
   }
   let vraf = 0;
