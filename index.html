@@ -161,6 +161,26 @@
   #stg canvas.vc{position:absolute;left:-256px;top:-332px;bottom:auto;margin:0;width:512px;height:336px;transform:scale(calc(var(--c,1)*.85));transform-origin:50% 100%;image-rendering:pixelated;pointer-events:none}
 
   #menu > #mbox{position:absolute;left:50%;top:50%;width:960px;height:540px;margin:-270px 0 0 -480px;transform:scale(var(--s,1));transform-origin:50% 50%;overflow:hidden}
+/* settings: tabs, controls spacing, profile, display, audio */
+#menu .stabs{display:flex;gap:10px;justify-content:center;padding:8px 40px 0}
+#menu .stabs button{width:150px;height:34px;background:#1a1050;border:3px solid #3a2c8a;font-size:8px;box-shadow:0 1px 0 #0e0a3a,0 2px 0 #0e0a3a,0 3px 0 #0e0a3a}
+#menu .stabs button:hover{border-color:#5ff0ff} #menu .stabs button.on{border-color:#ffe45e;background:#3a2a9a;color:#fff}
+#menu .kcols{padding:26px 40px 0;gap:34px} #menu .kcol{max-width:260px} #menu .kcol label{margin-bottom:14px}
+#menu .krw{margin-bottom:12px;min-height:34px} #menu .kc{min-width:112px}
+#menu .knote{margin-top:16px;font-size:7px;line-height:2;color:#9a8ee0}
+#menu .kfix{bottom:96px}
+#menu .kpage{width:560px;margin:38px auto 0} #menu .kpage > label{display:block;font-size:8px;color:#ff8be8;letter-spacing:1px}
+#menu .tin{display:block;width:100%;height:46px;margin-top:12px;padding:0 14px;background:#0e0a3a;border:3px solid #3a2c8a;color:#ffe45e;font:inherit;font-size:12px;text-transform:uppercase;outline:none;box-sizing:border-box}
+#menu .tin:focus{border-color:#ffe45e}
+#menu .drow{display:flex;align-items:center;gap:14px;height:46px;margin-bottom:14px;font-size:8px;color:#e8e4ff} #menu .drow > span{width:180px;flex:none}
+#menu .drow .seg{margin-left:auto} #menu .drow .seg button{width:84px;height:34px}
+#menu .sld{flex:1;min-width:0;accent-color:#ffe45e} #menu .drow b{width:50px;text-align:right;color:#ffe45e;font-size:9px}
+#menu .sw{display:flex;gap:10px;margin-left:auto} #menu .sw button{width:34px;height:34px;padding:0;background:var(--c);border:3px solid #0e0a3a;box-shadow:0 0 0 2px #3a2c8a} #menu .sw button:hover{box-shadow:0 0 0 2px #5ff0ff} #menu .sw button.on{box-shadow:0 0 0 3px #ffe45e}
+#menu .soon{text-align:center;font-size:10px;color:#ff8be8;margin-top:70px;line-height:2} #menu .soon.sm{font-size:9px;color:#9a8ee0;margin-top:14px}
+#menu .kcols{padding:24px 28px 0;gap:22px;align-items:flex-start} #menu .kcol{max-width:none;background:rgba(10,6,40,.88);border:3px solid #2a1f6a;padding:16px 16px 6px}
+#menu .kpage{background:rgba(10,6,40,.88);border:3px solid #2a1f6a;padding:22px 26px 10px;box-sizing:border-box}
+#menu .kfix{left:50%;right:auto;transform:translateX(-50%);white-space:nowrap;background:rgba(10,6,40,.88);border:3px solid #2a1f6a;padding:9px 16px;bottom:100px}
+#menu .kcol .knote{margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -346,10 +366,13 @@ let camX = 0, camY = 0;
 const CAM_Z = 0.9, TILT = Math.sin(55*Math.PI/180), HF = Math.cos(55*Math.PI/180)/Math.sin(55*Math.PI/180);   // camera: zoom, 60 degree tilt (ground squash), height -> ground-y
 const VW = () => SW/CAM_Z, VH = () => SH/(CAM_Z*TILT);   // how much of the world the camera sees
 // ---- rebindable controls (SETTINGS screen): action -> KeyboardEvent.code, saved in localStorage ----
-const KB_DEF = {up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', dash:'Space', q:'KeyQ', w:'KeyW', e:'KeyE', r:'KeyR', bots:'KeyM', map:'KeyV', diff:'KeyD'};
+const KB_DEF = {up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', dash:'Space', q:'KeyQ', w:'KeyW', e:'KeyE', r:'KeyR', aa:'Mouse0', mv:'Mouse2'};
 const KB = Object.assign({}, KB_DEF);
 try { const j = JSON.parse(localStorage.getItem('aa_keys') || '{}'); for (const k in KB_DEF) if (typeof j[k] === 'string' && j[k]) KB[k] = j[k]; } catch (e) {}
-const kbName = c => c === 'Space' ? 'SPACE' : c.startsWith('Arrow') ? c.slice(5).toUpperCase() : c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c.startsWith('Numpad') ? 'NUM' + c.slice(6) : c.replace('Left', 'L ').replace('Right', 'R ').toUpperCase();
+const kbName = c => c.startsWith('Mouse') ? ({Mouse0:'LEFT CLICK', Mouse1:'MIDDLE CLICK', Mouse2:'RIGHT CLICK'}[c] || 'MOUSE ' + (+c.slice(5) + 1)) : c === 'Space' ? 'SPACE' : c.startsWith('Arrow') ? c.slice(5).toUpperCase() : c.startsWith('Key') ? c.slice(3) : c.startsWith('Digit') ? c.slice(5) : c.startsWith('Numpad') ? 'NUM' + c.slice(6) : c.replace('Left', 'L ').replace('Right', 'R ').toUpperCase();
+const PROF = {alias:''}, DISP = {bright:100, hi:true, hc:'#ff3b3b', fps:false};   // profile + display settings (menu SETTINGS), saved in localStorage
+try { const j = JSON.parse(localStorage.getItem('aa_profile') || '{}'); if (typeof j.alias === 'string') PROF.alias = j.alias.slice(0, 14); } catch (e) {}
+try { const j = JSON.parse(localStorage.getItem('aa_disp') || '{}'); if (typeof j.bright === 'number') DISP.bright = Math.max(50, Math.min(150, j.bright)); if (typeof j.hi === 'boolean') DISP.hi = j.hi; if (typeof j.hc === 'string' && /^#[0-9a-f]{6}$/i.test(j.hc)) DISP.hc = j.hc; if (typeof j.fps === 'boolean') DISP.fps = j.fps; } catch (e) {}
 const keys = {}, mouse = {x:W/2, y:H/2, sx:SW/2, sy:SH/2, down:false};   // x/y = world, sx/sy = screen
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') return;
@@ -357,6 +380,11 @@ addEventListener('keydown', e => {
   keys[e.code] = true; if (e.code==='Space' || e.code.startsWith('Arrow') || Object.values(KB).includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
+// attack / move-to-click can sit on any mouse button or key (SETTINGS): KB.aa = auto attack (hold shows range, release swings), KB.mv = move to the cursor
+const uiUp_ = () => typeof MENU !== 'undefined' && MENU.open;
+addEventListener('keydown', e => { if (e.repeat || ended || uiUp_() || (e.target && e.target.tagName === 'INPUT')) return; if (e.code === KB.mv){ demo = null; actMove(); } else if (e.code === KB.aa){ demo = null; actAtk(true); } });
+addEventListener('keyup', e => { if (e.code === KB.aa) actAtk(false); });
+addEventListener('mouseup', e => { if (e.button > 2) e.preventDefault(); }); addEventListener('auxclick', e => { if (e.button > 2) e.preventDefault(); });
 const mousePos = e => { const r = cv.getBoundingClientRect(); return document.pointerLockElement === cv ? {x:mouse.sx, y:mouse.sy} : {x:(e.clientX-r.left)*SW/r.width, y:(e.clientY-r.top)*SH/r.height}; };
 cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); if (document.pointerLockElement === cv){ mouse.sx = Math.max(0, Math.min(SW, mouse.sx + e.movementX*SW/r.width)); mouse.sy = Math.max(0, Math.min(SH, mouse.sy + e.movementY*SH/r.height)); } else { mouse.sx = (e.clientX-r.left)*SW/r.width; mouse.sy = (e.clientY-r.top)*SH/r.height; } mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY; });
 let moveTarget = null, admin = false, bots = true, ended = false, endT = 0;
@@ -374,12 +402,20 @@ cv.addEventListener('mousedown', e => {
   }
   demo = null;
   mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
-  if (e.button === 2){ if (player.aimK){ player.aimK = null; return; }   // right click while aiming = cancel
-    player.focus = aaPick(player, mouse.x, mouse.y, 60);
-    moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'}); }
-  else mouse.down = true;
+  if (e.button > 2) e.preventDefault();
+  const mc_ = 'Mouse' + e.button; if (mc_ === KB.mv) actMove(); else if (mc_ === KB.aa) actAtk(true);
 });
-addEventListener('mouseup', e => { if (e.button === 0){ const was = mouse.down; mouse.down = false; if (was && !bots && !demo && !ended) aaRelease(); } });
+function actMove(){                                  // move to the cursor (default: right click)
+  mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
+  if (player.aimK){ player.aimK = null; return; }    // while aiming = cancel
+  player.focus = aaPick(player, mouse.x, mouse.y, 60);
+  moveTarget = {x:mouse.x, y:mouse.y}; fx.push({x:mouse.x, y:mouse.y, t:0.4, txt:'x'});
+}
+function actAtk(dn){                                 // auto attack (default: left click)
+  if (dn){ mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY; mouse.down = true; }
+  else { const was = mouse.down; mouse.down = false; if (was && !bots && !demo && !ended) aaRelease(); }
+}
+addEventListener('mouseup', e => { if ('Mouse' + e.button === KB.aa) actAtk(false); });
 function aaRelease(){                                 // left click: hold shows the auto range, release attacks
   const f = player; if (f.hp<=0 || f.howT>=0 || f.aimK) return;
   const mx = mouse.sx/CAM_Z + camX, my = mouse.sy/(CAM_Z*TILT) + camY, hit = aaPick(f, mx, my, 60), tg = hit || aaNearest(f);
@@ -3321,6 +3357,8 @@ function drawFighter(f){
   ctx.fillStyle = 'rgba(0,0,0,.3)';
   if (SPR3D[f.id]){ ctx.beginPath(); ctx.ellipse(0, 0, 13/CAM_Z, 4.4/CAM_Z, 0, 0, 7); ctx.fill(); }   // shadow right under the feet
   else { ctx.beginPath(); ctx.ellipse(0, f.r*0.8, f.r, f.r*0.4, 0, 0, 7); ctx.fill(); }
+  if (DISP.hi && f===enemy && f.hp>0){ const th = SPR3D[f.id], rx = th ? 24/CAM_Z : f.r+8, ry_ = th ? 9/CAM_Z : (f.r+6)*0.4, cy_ = th ? 0 : f.r*0.8, ga_ = ctx.globalAlpha;   // enemy highlight ring (SETTINGS > DISPLAY)
+    ctx.save(); ctx.strokeStyle = DISP.hc; ctx.fillStyle = DISP.hc; ctx.shadowColor = DISP.hc; ctx.shadowBlur = 8; ctx.lineWidth = 2.5; ctx.globalAlpha = ga_*.9; ctx.beginPath(); ctx.ellipse(0, cy_, rx, ry_, 0, 0, 7); ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = ga_*.16; ctx.fill(); ctx.restore(); }
   if (player.id===enemy.id){ const k3 = SPR3D[f.id] ? 1/CAM_Z : 1, ry = SPR3D[f.id] ? 0 : f.r*0.8, ga = ctx.globalAlpha;   // team ring under the feet, mirror matches only: blue = you, red = enemy
     ctx.globalAlpha = ga*0.5; ctx.strokeStyle = f.team==='p' ? '#3da5ff' : '#ff4040'; ctx.lineWidth = 1.5*k3; ctx.beginPath(); ctx.ellipse(0, ry, (SPR3D[f.id] ? 17 : f.r+2)*k3, (SPR3D[f.id] ? 6 : (f.r+2)*0.4)*k3, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }
   const img = sprites[f.id], is3d = SPR3D[f.id] && draw3d(f);
@@ -3385,9 +3423,12 @@ function drawFighter(f){
   if (f.stun>0){ ctx.fillStyle = '#ffd93d'; ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center'; ctx.fillText('*', f.x, f.y-(SPR3D[f.id] ? 78 : f.r+8)); }
   if (admin){ ctx.strokeStyle = '#39ff6a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.stroke(); }   // admin: the real hitbox on the ground
 }
+let _fpsT = 0, _fpsN = 0, _fps = 0;
 function hud(){
+  _fpsN++; { const n_ = performance.now(); if (n_ - _fpsT > 500){ _fps = Math.round(_fpsN*1000/(n_ - _fpsT)); _fpsN = 0; _fpsT = n_; } }
+  if (DISP.fps){ ctx.fillStyle = '#7dffa8'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right'; ctx.fillText(_fps+' FPS', SW-8, SH-20); ctx.textAlign = 'center'; }
   // top bars
-  bar(16,16,300,22,player.hp/player.max,'#3aa0ff',ROSTER[player.id].name.toUpperCase());
+  bar(16,16,300,22,player.hp/player.max,'#3aa0ff',PROF.alias ? PROF.alias.toUpperCase()+' ('+ROSTER[player.id].name.toUpperCase()+')' : ROSTER[player.id].name.toUpperCase());
   bar(SW-316,16,300,22,enemy.hp/enemy.max,'#ff4d4d',ROSTER[enemy.id].name.toUpperCase());
   [[player,16,'left'],[enemy,SW-16,'right']].forEach(([f,x,al]) => {      // Midoriya gear / Todoroki temperature status
     if (f.id==='todoroki'){
@@ -3413,10 +3454,10 @@ function hud(){
   ctx.fillStyle = player.dashCd>0 ? '#556' : '#ffb020';
   ctx.fillRect(SW/2-60,SH-38,120*(1-Math.max(0,player.dashCd)/1.2),14);
   ctx.fillStyle = '#fff'; ctx.font='bold 12px monospace'; ctx.textAlign='center';
-  ctx.textBaseline = 'middle'; ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#111'; ctx.fillText('SPACE DASH', SW/2, SH-31); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace';
+  ctx.textBaseline = 'middle'; ctx.font = 'bold 10px monospace'; ctx.fillStyle = '#111'; ctx.fillText(kbName(KB.dash)+' DASH', SW/2, SH-31); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace';
   ctx.textAlign = 'left'; ctx.font = 'bold 10px monospace';
   ctx.fillText(training ? '0 EXIT TESTER   1 GOJO  2 SUKUNA  3 BAKUGO  4 MIDORIYA  5 TODOROKI 6 TANJIRO 7 ZENITSU   CLICK A COMBO TO WATCH IT   TAB ADMIN'
-                        : '0 TESTER   MATCHUP: TWO NUMBERS (1 GOJO 2 SUKUNA 3 BAKUGO 4 MIDORIYA 5 TODOROKI 6 TANJIRO 7 ZENITSU) e.g. 12   '+kbName(KB.map)+' MAP: '+MAP_NAME[MAP]+'   '+kbName(KB.bots)+' '+(bots?'PLAY':'BOTS')+'   '+kbName(KB.diff)+' BOT: '+difficulty.toUpperCase()+'   TAB ADMIN', 8, SH-6);
+                        : '0 TESTER   MATCHUP: TWO NUMBERS (1 GOJO 2 SUKUNA 3 BAKUGO 4 MIDORIYA 5 TODOROKI 6 TANJIRO 7 ZENITSU) e.g. 12   TAB ADMIN', 8, SH-6);
   ctx.font = 'bold 12px monospace';
   ctx.textAlign = 'center';
   if (training){
@@ -3436,7 +3477,7 @@ function hud(){
     ctx.textAlign = 'center';
   } else
   ctx.fillText('WINS  '+ROSTER[matchP].name.toUpperCase()+' '+(wins[matchP]||0)+' - '+(wins[matchE]||0)+' '+ROSTER[matchE].name.toUpperCase(), SW/2, 14);
-  if (!bots && !training){ ctx.fillStyle = difficulty==='easy' ? '#7dffa8' : difficulty==='hard' ? '#ff6a5a' : '#ffd93d'; ctx.font = 'bold 11px monospace'; ctx.fillText('BOT: '+difficulty.toUpperCase()+'  ('+kbName(KB.diff)+' to change)', SW/2, 28); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace'; }
+  if (!bots && !training){ ctx.fillStyle = difficulty==='easy' ? '#7dffa8' : difficulty==='hard' ? '#ff6a5a' : '#ffd93d'; ctx.font = 'bold 11px monospace'; ctx.fillText('BOT: '+difficulty.toUpperCase(), SW/2, 28); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace'; }
   if (pickFirst && !training && performance.now() - pickAt < 2500){   // waiting for the 2nd number
     ctx.fillStyle = 'rgba(5,10,30,.85)'; ctx.fillRect(SW/2-190, SH/2-28, 380, 56);   // (matchup picker)
     ctx.fillStyle = '#ffd93d'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -5189,9 +5230,6 @@ function startMatch(p, e){
 addEventListener('keydown', e => {
   if (typeof MENU !== 'undefined' && MENU.open) return;   // the menu is up: hotkeys off
   if (e.code==='Tab'){ e.preventDefault(); admin = !admin; }
-  else if (e.code===KB.bots){ bots = !bots; }
-  else if (e.code===KB.map){ MAP = MAPS[(MAPS.indexOf(MAP)+1) % MAPS.length]; if (training) startTraining(trainIdx); else startMatch(matchP, matchE); }   // switch map
-  else if (e.code===KB.diff){ difficulty = DIFF_ORDER[(DIFF_ORDER.indexOf(difficulty)+1) % DIFF_ORDER.length]; }   // bot difficulty
   else if (e.code==='Digit0'){ if (training) startMatch(lastMatch[0], lastMatch[1]); else startTraining(0); }   // 0: tester on/off
   else if (training && ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].includes(e.code)) startTraining(+e.code.slice(5) - 1);   // tester: 1-5 pick the character
   else if (['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].includes(e.code)){    // two numbers = matchup: 1 then 2 = Gojo vs Sukuna
@@ -5492,16 +5530,30 @@ const MENU = (() => {
   const IDS = PICK, MAPS_UI = ['shibuya', 'fujikasane', 'ua', 'classic'];
   const MAP_SUB = {shibuya:'city crossing', fujikasane:'wisteria mountain', ua:'park & fountain', classic:'plain arena'};
   const V = {id:'gojo', info:'q', t0:0, live:null, seq:null};
-  const S = {open:true, screen:'home', inMatch:false, pause:false, slot:'you', step:'', you:'gojo', opp:'random', map:'shibuya', diff:'normal', code:''};
+  const S = {tab:'controls', msg:'', open:true, screen:'home', inMatch:false, pause:false, slot:'you', step:'', you:'gojo', opp:'random', map:'shibuya', diff:'normal', code:''};
   try { const j = JSON.parse(localStorage.getItem('aa_menu') || '{}'); for (const k of ['you', 'opp', 'map', 'diff']) if (j[k]) S[k] = j[k]; } catch (e) {}
   if (!IDS.includes(S.you)) S.you = 'gojo'; if (S.opp !== 'random' && !IDS.includes(S.opp)) S.opp = 'random';
   const save = () => { try { localStorage.setItem('aa_menu', JSON.stringify({you:S.you, opp:S.opp, map:S.map, diff:S.diff})); } catch (e) {} };
   const saveKeys = () => { try { localStorage.setItem('aa_keys', JSON.stringify(KB)); } catch (e) {} };
+  const LBL = {up:'UP', down:'DOWN', left:'LEFT', right:'RIGHT', dash:'DASH', q:'SKILL Q', w:'SKILL W', e:'SKILL E', r:'ULT R', aa:'ATTACK', mv:'MOVE'}, MOUSEOK = {aa:1, mv:1};
+  const setBind = code => {                                       // a code already used elsewhere swaps places (a mouse button can only sit on ATTACK / MOVE)
+    const a = S.bind; S.msg = '';
+    for (const o in KB) if (o !== a && KB[o] === code){ if (KB[a].startsWith('Mouse') && !MOUSEOK[o]){ S.msg = code.startsWith('Key') || code.startsWith('Arrow') || code === 'Space' ? kbName(code) + ' IS USED BY ' + LBL[o] : 'NOT ALLOWED'; return paint(); } KB[o] = KB[a]; }
+    KB[a] = code; saveKeys(); S.bind = null; paint();
+  };
   addEventListener('keydown', e => {                              // rebinding: the next key press (capture phase, so the game never sees it) becomes the new key
-    if (!S.bind) return; e.preventDefault(); e.stopImmediatePropagation(); const a = S.bind;
+    if (!S.bind) return; e.preventDefault(); e.stopImmediatePropagation();
     if (e.code === 'Tab' || e.code === 'MetaLeft' || e.code === 'MetaRight') return;
-    if (e.code !== 'Escape'){ for (const o in KB) if (o !== a && KB[o] === e.code) KB[o] = KB[a]; KB[a] = e.code; saveKeys(); }   // a key already used elsewhere swaps places
-    S.bind = null; paint(); }, true);
+    if (e.code === 'Escape'){ S.bind = null; S.msg = ''; return paint(); }
+    setBind(e.code); }, true);
+  addEventListener('mousedown', e => {                            // ATTACK / MOVE can also take a mouse button (not the bind buttons themselves)
+    if (!S.bind || !MOUSEOK[S.bind] || e.target.closest('.kc')) return; e.preventDefault(); e.stopImmediatePropagation(); setBind('Mouse' + e.button); }, true);
+  addEventListener('contextmenu', e => { if (S.bind && MOUSEOK[S.bind]) e.preventDefault(); }, true);
+  const saveProf = () => { try { localStorage.setItem('aa_profile', JSON.stringify(PROF)); } catch (e) {} };
+  const saveDisp = () => { try { localStorage.setItem('aa_disp', JSON.stringify(DISP)); } catch (e) {} };
+  const applyDisp = () => { cv.style.filter = DISP.bright === 100 ? '' : 'brightness(' + DISP.bright / 100 + ')'; };
+  applyDisp();
+  const HCOLS = ['#ff3b3b', '#ff9a1f', '#ffe45e', '#4dff7a', '#3ff0ff', '#4d8bff', '#ff5fe0', '#ffffff'];
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const col = id => (ROSTER[id] || {}).color || '#8a8f98';
   const pc = (id, cls) => `<canvas class="pt ${cls||''}" width="44" height="72" data-p="${id}"></canvas>`;
@@ -5638,15 +5690,27 @@ const MENU = (() => {
       <button class="cfgbtn" data-go="settings">SETTINGS</button>
       </div>`,
     settings: () => {
-      const row = (a, lab) => `<div class="krw"><span>${lab}</span><button class="kc${S.bind === a ? ' on' : ''}" data-bind="${a}">${S.bind === a ? 'PRESS A KEY' : kbName(KB[a])}</button></div>`;
-      return `${head('SETTINGS')}
-      <div class="kcols">
-        <div class="kcol"><label>MOVEMENT</label>${row('up', 'UP')}${row('down', 'DOWN')}${row('left', 'LEFT')}${row('right', 'RIGHT')}${row('dash', 'DASH')}</div>
-        <div class="kcol"><label>ABILITIES</label>${row('q', 'SKILL Q')}${row('w', 'SKILL W')}${row('e', 'SKILL E')}${row('r', 'ULT R')}</div>
-        <div class="kcol"><label>OTHER</label>${row('bots', 'BOTS / MANUAL')}${row('map', 'SWITCH MAP')}${row('diff', 'BOT LEVEL')}</div>
-      </div>
-      <div class="kfix">MOUSE: AIM  -  LEFT CLICK ATTACK  -  RIGHT CLICK MOVE  -  ESC MENU</div>
-      <div class="opts"><button class="start" data-act="resetKeys">RESET DEFAULTS</button></div>`; },
+      const row = (a, lab) => `<div class="krw"><span>${lab}</span><button class="kc${S.bind === a ? ' on' : ''}" data-bind="${a}">${S.bind === a ? (MOUSEOK[a] ? 'KEY OR CLICK' : 'PRESS A KEY') : kbName(KB[a])}</button></div>`;
+      const tabs = [['controls', 'CONTROLS'], ['profile', 'PROFILE'], ['display', 'DISPLAY'], ['audio', 'AUDIO']];
+      let body = '', foot = '';
+      if (S.tab === 'controls'){
+        body = `<div class="kcols">
+          <div class="kcol"><label>MOVEMENT</label>${row('up', 'UP')}${row('down', 'DOWN')}${row('left', 'LEFT')}${row('right', 'RIGHT')}${row('dash', 'DASH')}</div>
+          <div class="kcol"><label>ABILITIES</label>${row('q', 'SKILL Q')}${row('w', 'SKILL W')}${row('e', 'SKILL E')}${row('r', 'ULT R')}</div>
+          <div class="kcol"><label>MOUSE</label>${row('aa', 'ATTACK')}${row('mv', 'MOVE')}<div class="knote">AIM WITH THE MOUSE<br>ATTACK / MOVE: ANY KEY<br>OR MOUSE BUTTON</div></div></div>
+          <div class="kfix">${S.msg || 'CLICK A BUTTON, THEN PRESS THE NEW KEY  -  ESC CANCELS'}</div>`;
+        foot = `<div class="opts"><button class="start" data-act="resetKeys">RESET DEFAULTS</button></div>`;
+      } else if (S.tab === 'profile'){
+        body = `<div class="kpage"><label>ALIAS</label><input id="alias" class="tin" maxlength="14" spellcheck="false" autocomplete="off" placeholder="YOUR NAME" value="${PROF.alias.replace(/"/g, '')}"><div class="knote">SHOWN ON YOUR HEALTH BAR  -  14 LETTERS MAX</div></div>`;
+      } else if (S.tab === 'display'){
+        body = `<div class="kpage">
+          <div class="drow"><span>BRIGHTNESS</span><input id="bright" class="sld" type="range" min="50" max="150" step="5" value="${DISP.bright}"><b id="brightv">${DISP.bright}%</b></div>
+          <div class="drow"><span>ENEMY HIGHLIGHT</span>${seg('hi', [['1', 'ON'], ['0', 'OFF']], DISP.hi ? '1' : '0')}</div>
+          <div class="drow"><span>HIGHLIGHT COLOR</span><div class="sw">${HCOLS.map(c => `<button data-hc="${c}" class="${DISP.hc === c ? 'on' : ''}" style="--c:${c}"></button>`).join('')}</div></div>
+          <div class="drow"><span>SHOW FPS</span>${seg('fps', [['1', 'ON'], ['0', 'OFF']], DISP.fps ? '1' : '0')}</div></div>`;
+        foot = `<div class="opts"><button class="start" data-act="resetDisp">RESET DEFAULTS</button></div>`;
+      } else body = `<div class="kpage"><div class="soon">MUSIC  -  SOUND EFFECTS  -  VOICE LINES</div><div class="soon sm">COMING SOON</div></div>`;
+      return `${head('SETTINGS')}<div class="stabs">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${S.tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>${body}${foot}`; },
     pve: stepHTML, pvp: stepHTML, train: stepHTML
   };
   function paint(){
@@ -5784,21 +5848,29 @@ const MENU = (() => {
   function startPve(){ const opp = S.opp === 'random' ? randOpp() : S.opp; MAP = S.map; difficulty = S.diff; save(); startMatch(S.you, opp); bots = false; S.inMatch = true; hide(); }
   function startTrain(){ MAP = S.map; save(); startTraining(IDS.indexOf(S.you)); S.inMatch = true; hide(); }
   $m.addEventListener('click', e => {
-    const t = e.target.closest('[data-bind],[data-go],[data-act],[data-pick],[data-opp],[data-slot],[data-map],[data-seg] button,[data-nav],[data-info]'); if (!t) return;
+    const t = e.target.closest('[data-bind],[data-tab],[data-hc],[data-go],[data-act],[data-pick],[data-opp],[data-slot],[data-map],[data-seg] button,[data-nav],[data-info]'); if (!t) return;
     if (t.dataset.nav){ V.id = IDS[(IDS.indexOf(V.id) + +t.dataset.nav + IDS.length) % IDS.length]; V.info = 'p'; V.seq = null; V.t0 = performance.now(); V.live = null; S.you = V.id; save(); return paint(); }
     if (t.dataset.info){ V.info = t.dataset.info; V.seq = null; V.t0 = performance.now(); V.live = null; return paint(); }
-    if (t.dataset.bind){ S.bind = S.bind === t.dataset.bind ? null : t.dataset.bind; return paint(); }
+    if (t.dataset.tab){ S.tab = t.dataset.tab; S.bind = null; S.msg = ''; return paint(); }
+    if (t.dataset.hc){ DISP.hc = t.dataset.hc; saveDisp(); return paint(); }
+    if (t.dataset.bind){ S.msg = ''; S.bind = S.bind === t.dataset.bind ? null : t.dataset.bind; return paint(); }
     if (t.dataset.go) return go(t.dataset.go);
     if (t.dataset.pick){ const id = t.dataset.pick; if (S.step === 'opp') S.opp = id; else S.you = id; if (id !== 'random') setV(id); save(); return paint(); }
     if (t.dataset.opp){ S.opp = t.dataset.opp; save(); return paint(); }
     if (t.dataset.slot){ S.slot = t.dataset.slot; return paint(); }
     if (t.dataset.map){ S.map = t.dataset.map; save(); return paint(); }
+    if (t.parentElement.dataset.seg === 'hi' || t.parentElement.dataset.seg === 'fps'){ DISP[t.parentElement.dataset.seg] = t.dataset.v === '1'; saveDisp(); return paint(); }
     if (t.parentElement.dataset.seg){ S[t.parentElement.dataset.seg] = t.dataset.v; save(); return paint(); }
     const a = t.dataset.act;
     if (a === 'back' || a === 'next'){ const L = MODES[S.screen] || [], k = L.indexOf(S.step) + (a === 'next' ? 1 : -1); if (k < 0) return go('home'); if (k < L.length) stepTo(L[k]); return; }
-    if (a === 'resetKeys'){ Object.assign(KB, KB_DEF); saveKeys(); return paint(); }
+    if (a === 'resetKeys'){ Object.assign(KB, KB_DEF); S.bind = null; S.msg = ''; saveKeys(); return paint(); }
+    if (a === 'resetDisp'){ Object.assign(DISP, {bright:100, hi:true, hc:'#ff3b3b', fps:false}); saveDisp(); applyDisp(); return paint(); }
     if (a === 'startPve') startPve(); else if (a === 'startTrain') startTrain(); else if (a === 'resume') hide();
     else if (a === 'create'){ S.code = ''; paint(); } else if (a === 'join'){ const i = document.getElementById('code'); if (i) S.code = i.value.toUpperCase(); }
+  });
+  $m.addEventListener('input', e => {
+    if (e.target.id === 'alias'){ PROF.alias = e.target.value.replace(/[^A-Za-z0-9 _.-]/g, '').slice(0, 14); if (PROF.alias !== e.target.value) e.target.value = PROF.alias; saveProf(); }
+    else if (e.target.id === 'bright'){ DISP.bright = +e.target.value; document.getElementById('brightv').textContent = DISP.bright + '%'; applyDisp(); saveDisp(); }
   });
   $b.addEventListener('click', show);
   let tilted = null;
