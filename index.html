@@ -4915,14 +4915,20 @@ const NR = (() => {
       bullets[bullets.length - 1].src = f;
       if (c.cl) spawnFx('poof', c.x, c.y, {lift: 24});
     }
+    f.nrAimP = null;
   }
   // ---- W: four clones at 12 / 3 / 6 / 9 o'clock for 2s: they copy Q and E, do not auto, pop on one hit ----
+  function wSpots(f, live){                                      // 4 clone spots; 12 o'clock points at the cursor
+    const p = live && human(f) ? {x: mouse.x, y: mouse.y} : target(f), th = Math.atan2(p.y - f.y, p.x - f.x) + Math.PI / 2, cs = Math.cos(th), sn = Math.sin(th);
+    return [[0, -CL_R], [CL_R, 0], [0, CL_R], [-CL_R, 0]].map(o => [o[0] * cs - o[1] * sn, o[0] * sn + o[1] * cs]);
+  }
   function w(f){
     for (let i = clones.length - 1; i >= 0; i--) if (clones[i].f === f) clones.splice(i, 1);
     f.nrW = W_T;
-    for (const o of [[0, -CL_R], [CL_R, 0], [0, CL_R], [-CL_R, 0]]){
+    for (const o of wSpots(f)){
       const c = {f, ox: o[0], oy: o[1], x: f.x + o[0], y: f.y + o[1], t: 0, dir: 'S', dead: false}; clones.push(c); spawnFx('poof', c.x, c.y, {lift: 24});
     }
+    f.nrAimP = null;
   }
   // ---- E: a toad drops from the sky on the spot: damage + slow ----
   function e(f, a){
@@ -4932,6 +4938,7 @@ const NR = (() => {
       toads.push({f, x: s.x, y: s.y, t: 0, hit: false, row: dir8(p.x - c.x, p.y - c.y)});
       if (c.cl) spawnFx('poof', c.x, c.y, {lift: 24});
     }
+    f.nrAimP = null;
   }
   // ---- R: Kurama: a giant fox with a shield. Contact damage, crushes crates, auto = slam (heals), Q/W/E locked, dash cooldown 30% shorter ----
   function r(f){
@@ -5023,23 +5030,41 @@ const NR = (() => {
     ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI * 0.05, Math.PI * 0.9); ctx.stroke();
     ctx.restore();
   }
+  function sigil(x, y, R, al, col){                                 // toad-summon seal: glowing fill, two counter-rotating dashed rings, orbiting ticks, a toad print in the middle
+    ctx.save(); ctx.translate(x, y);
+    const g = ctx.createRadialGradient(0, 0, R * 0.1, 0, 0, R); g.addColorStop(0, col + '66'); g.addColorStop(1, col + '0d');
+    ctx.globalAlpha = al * (0.8 + 0.2 * Math.sin(T * 6)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.fill();
+    ctx.globalAlpha = al; ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.setLineDash([11, 7]); ctx.lineDashOffset = -T * 45; ctx.beginPath(); ctx.arc(0, 0, R, 0, 7); ctx.stroke();
+    ctx.lineWidth = 1.8; ctx.setLineDash([4, 6]); ctx.lineDashOffset = T * 35; ctx.beginPath(); ctx.arc(0, 0, R * 0.62, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.lineWidth = 2.5; for (let i = 0; i < 4; i++){ const a = T * 0.9 + i * Math.PI / 2, c = Math.cos(a), s = Math.sin(a); ctx.beginPath(); ctx.moveTo(c * R * 0.86, s * R * 0.86); ctx.lineTo(c * R * 1.14, s * R * 1.14); ctx.stroke(); }
+    ctx.fillStyle = col; ctx.globalAlpha = al * 0.9; const k = Math.max(0.5, R / 95);
+    ctx.beginPath(); ctx.ellipse(0, 6 * k, 9 * k, 7 * k, 0, 0, 7); ctx.fill(); for (const dx of [-12, -4, 4, 12]){ ctx.beginPath(); ctx.arc(dx * k, -6 * k - (Math.abs(dx) < 8 ? 3 * k : 0), 3 * k, 0, 7); ctx.fill(); }
+    ctx.restore();
+  }
   function ground(){
     for (const m of SMASH_MARKS) dent(m);
     for (const o of toads){
       if (o.t < E_DELAY){ const k = Math.min(3, Math.floor(o.t / 0.15)); frameDraw('toad_shadow', k * 0.125, o.x, o.y, {}); }
     }
     for (const s of fxs) if (s.under) frameDraw(s.n, s.t, s.x, s.y, s);
-    for (const f of nrs()){                                   // hold Q / E: range ring, landing circle (clones get their own)
-      if (f.hp <= 0 || !(f.aimK === 'q' || f.aimK === 'e') || f.nrR > 0) continue;
-      const p = target(f);
+    for (const f of nrs()){                                   // hold Q / W / E: live indicators (always follow the cursor)
+      if (f.hp <= 0 || !(f.aimK === 'q' || f.aimK === 'e' || f.aimK === 'w') || f.nrR > 0) continue;
+      const p = human(f) ? {x: mouse.x, y: mouse.y} : target(f);
+      if (f.aimK === 'w'){                                    // clone formation, rotated so 12 o'clock points at the cursor
+        const sp = wSpots(f, true);
+        sp.forEach((o, i) => { const x = f.x + o[0], y = f.y + o[1]; ctx.save(); ctx.globalAlpha = 0.35; ctx.strokeStyle = '#ffd27a'; ctx.setLineDash([5, 6]); ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(x, y); ctx.stroke(); ctx.restore(); sigil(x, y, 26, i === 0 ? 1 : 0.7, i === 0 ? '#ffe9a8' : '#ffb04a'); });
+        continue;
+      }
       for (const c of casters(f)){
         if (f.aimK === 'q'){
-          if (c.me) continue;                                  // Naruto's own lane is the game's line indicator (spins around him)                                   // Gojo-style lane: a long rectangle from each caster toward the cursor
+          if (c.me) continue;                                  // Naruto's own lane is the game's line indicator (spins around him)
           const ang = Math.atan2(p.y - c.y, p.x - c.x);
-          ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(ang); ctx.globalAlpha = c.me ? 0.3 : 0.2; ctx.fillStyle = '#6fd0ff'; ctx.fillRect(0, -20, RQ, 40); ctx.globalAlpha = 0.85; ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 2; ctx.strokeRect(0, -20, RQ, 40); ctx.restore();
+          ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(ang); ctx.globalAlpha = 0.2; ctx.fillStyle = '#6fd0ff'; ctx.fillRect(0, -20, RQ, 40); ctx.globalAlpha = 0.85; ctx.strokeStyle = '#bfefff'; ctx.lineWidth = 2; ctx.strokeRect(0, -20, RQ, 40); ctx.restore();
         } else {
           const s = inArena(clampTo(c, {x: p.x + (c.cl ? c.cl.ox * TOAD_SP : 0), y: p.y + (c.cl ? c.cl.oy * TOAD_SP : 0)}, RE));
-          if (!c.me) ring(c.x, c.y, RE, '#ffd27a', 0.35, false); ring(s.x, s.y, E_R, '#ffd27a', 0.9, true);
+          ctx.save(); ctx.globalAlpha = 0.3; ctx.strokeStyle = '#ffd27a'; ctx.lineWidth = 2; ctx.setLineDash([4, 8]); ctx.lineDashOffset = -T * 30; ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(s.x, s.y); ctx.stroke(); ctx.restore();   // tether to the landing spot
+          if (!c.me) ring(c.x, c.y, RE, '#ffd27a', 0.25, false);
+          sigil(s.x, s.y, E_R, 1, '#ffd27a');
         }
       }
     }
