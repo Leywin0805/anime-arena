@@ -4942,7 +4942,7 @@ const NR = (() => {
   function endForm(f){ f.nrR = 0; f.nrSh = 0; f.r = 13; f.nrGd = false; spawnFx('poof', f.x, f.y, {lift: 30, big: true}); }
   function slam(f){
     const tg = foe(f); bursts.push({x: f.x, y: f.y, t: 0, slam: true}); damageArea(f.x, f.y, SLAM_R, 8);
-    smashCrack(f.x, f.y, SLAM_R * 0.7);
+    smashCrack(f.x, f.y, SLAM_R * 1.2);   // marks the whole area the smash can hurt
     try { play3(f, 'dash', f.aim, {dur: 0.3}); } catch (_) {}
     if (tg && tg.hp > 0){ const d = Math.hypot(tg.x - f.x, tg.y - f.y); if (d < SLAM_R + tg.r){ hit(tg, SLAM_DMG, f, (tg.x - f.x) / (d || 1) * 420, (tg.y - f.y) / (d || 1) * 420); f.hp = Math.min(f.max, f.hp + SLAM_HEAL); fx.push({x: f.x, y: f.y - 60, t: 0.7, txt: '+' + SLAM_HEAL}); } }
   }
@@ -5007,8 +5007,11 @@ const NR = (() => {
     const d = FXI.toad3d; if (!d || !d.img.complete) return;
     let fr, yo = 0, t = o.t;
     if (t < 0.6){ fr = t < 0.47 ? 0 : 1; yo = -(1 - (t - 0.35) / 0.25) * 210; } else if (t < 0.68) fr = 2; else if (t < 0.8) fr = 3; else if (t < 1.7) fr = [4, 5, 6, 5, 6, 5, 6, 7][Math.min(7, Math.floor((t - 0.8) / 0.12))]; else fr = t < 2.05 ? 8 : 9;
+    const tg = foe(o.f); if (tg && t >= 0.6 && t < 1.8) o.row = dir8(tg.x - o.x, tg.y - o.y);          // turns to watch the enemy
     const row = Math.max(0, SPR3D.naruto.DIRS.indexOf(o.row));
-    at(o.x, o.y + yo, () => ctx.drawImage(d.img, fr * d.frameW, row * d.frameH, d.frameW, d.frameH, -d.ox, -d.oy, d.frameW, d.frameH));
+    let sx = 1, sy = 1;
+    if (t >= 0.8 && t < 1.75){ const k = t - 0.8; sy = 1 + 0.05 * Math.sin(k * 13); sx = 1 - 0.03 * Math.sin(k * 13); yo = -Math.max(0, Math.sin(k * 6.5 + 1.2)) * 7 * (k > 0.5 ? 1 : 0); }   // breathing and little hops
+    at(o.x, o.y + yo, () => { ctx.scale(sx, sy); ctx.drawImage(d.img, fr * d.frameW, row * d.frameH, d.frameW, d.frameH, -d.ox, -d.oy, d.frameW, d.frameH); });
   }
   function ring(x, y, R, col, al, fill){ ctx.save(); ctx.globalAlpha = al; ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.stroke(); if (fill){ ctx.globalAlpha = al * 0.25; ctx.fillStyle = col; ctx.fill(); } ctx.restore(); }
   function dent(m){                                                  // dented crater: dark bowl, shadow on the far rim, light on the near rim
