@@ -5133,7 +5133,7 @@ const SD = (() => {
   const Q_SPD = 260, Q_R = 20, Q_DMG = 4, Q_LIFE = 1.7, Q_T = 1.5, Q_AT = [0.25, 0.75, 1.25], Q_RANGE = 440;
   const Q_DASH = 105, Q_DASH_T = 0.12, W_RANGE = 560, W_DASH = 0.28, W_BACK = 210, W_BACK_T = 0.3, W_WIN = 4, SLAM_DMG = 8, ZONE_R = 95, ZONE_STRIKE = 0.7, ZONE_LIFE = 1.5, KIRIN_DMG = 24, SLOW = 0.8;
   const E_RANGE = 560, E_R = 115, E_TICK = 0.25, E_BASE = 0.25, E_MAX = 16;
-  const R_R = DOMAIN_R, R_SPD = 780, R_DMG = 30, R_EXIT = 25, R_MAX = 10, BLINK_CD = 45, BLINK_D = 170;
+  const GIANT = false, R_R = Math.round(DOMAIN_R * 1.4 * 1.3), R_SPD = 900, R_DMG = 30, R_EXIT = 25, R_MAX = 10, BLINK_CD = 45, BLINK_D = 170;
   const PURP = ['#f2e8ff', '#c7a8ff', '#8f66ff', '#4b2fb0', '#1a0f45'], RED = '#ff3b55';
   const balls = [], zones = [], slashes = [], puffs = [];
   let T = 0, SD_AA = false;
@@ -5161,7 +5161,7 @@ const SD = (() => {
   function q(f){ f.sdQ = {el: 0, n: 0}; f.root = Math.max(f.root, Q_T); f.drT = Math.max(f.drT, Q_T); }
   function fireball(f){
     const a = aimAng(f); faceTo(f, a);
-    if (!f.lunge){ const [bx, by] = clampW(f.x - Math.cos(a) * Q_DASH, f.y - Math.sin(a) * Q_DASH); f.lunge = {sx: f.x, sy: f.y, tx: bx, ty: by, t: 0, dur: Q_DASH_T, ghost: true, sd: 'qd'}; }
+    if (!f.lunge){ const [bx, by] = clampW(f.x + Math.cos(a) * Q_DASH, f.y + Math.sin(a) * Q_DASH); f.lunge = {sx: f.x, sy: f.y, tx: bx, ty: by, t: 0, dur: Q_DASH_T, ghost: true, sd: 'qd'}; }
     balls.push({f, x: f.x + Math.cos(a) * (f.r + 8), y: f.y + Math.sin(a) * (f.r + 8), vx: Math.cos(a) * Q_SPD, vy: Math.sin(a) * Q_SPD, life: Q_LIFE, age: 0});
     puffs.push({k: 'muzzle', x: f.x + Math.cos(a) * 18, y: f.y + Math.sin(a) * 18, t: 0, a});
   }
@@ -5178,7 +5178,7 @@ const SD = (() => {
     const a = ang(f, tg); faceTo(f, a);
     SD_AA = true; hit(tg, SLAM_DMG, f, Math.cos(a) * 60, Math.sin(a) * 60); SD_AA = false;
     const bl = []; for (let i = 0; i < 9; i++){ const r = ZONE_R * Math.sqrt((i + 0.5) / 9), an = i * 2.4; bl.push({x: tg.x + Math.cos(an) * r, y: tg.y + Math.sin(an) * r, d: i * 0.03}); }
-    zones.push({f, x: tg.x, y: tg.y, r: ZONE_R, t: 0, struck: false, bl});
+    zones.push({f, x: tg.x, y: tg.y, r: ZONE_R, t: 0, struck: false, bl, big: GIANT ? {} : null});
     puffs.push({k: 'ring', x: tg.x, y: tg.y, t: 0});
     if (f.stun > 0 || f.sdR) return;
     const ba = a + Math.PI, [bx, by] = clampW(f.x + Math.cos(ba) * W_BACK, f.y + Math.sin(ba) * W_BACK);
@@ -5189,8 +5189,9 @@ const SD = (() => {
     const tg = foe(f), P = f.sdAimP || {x: tg.x, y: tg.y}; let dx = P.x - f.x, dy = P.y - f.y; const d = Math.hypot(dx, dy) || 1, k = Math.min(1, E_RANGE / d);
     const [x, y] = clampW(f.x + dx * k, f.y + dy * k), fl = [];
     for (let i = 0; i < 70; i++){ const r = E_R * 0.92 * Math.sqrt(rnd(i * 3.1 + x)), an = rnd(i * 7.7 + y) * 6.283; fl.push({ox: Math.cos(an) * r, oy: Math.sin(an) * r, k: Math.floor(rnd(i * 5.3 + x * y) * FIRE.n), s: 0.15 + rnd(i * 2.3) * 0.16, ph: rnd(i) * 6.28, sp: 2 + rnd(i * 9) * 2}); }
-    fl.sort((a, b) => a.oy - b.oy);
-    f.sdE = {x, y, r: E_R, t: 0, fl}; puffs.push({k: 'ignite', x, y, t: 0});
+    for (const q of fl){ q.cl = 1.5 + rnd(q.ph) * 2.4; q.off = rnd(q.ph * 9.1) * q.cl * 2; }
+    const vn = []; for (let i = 0; i < 9; i++){ const a0 = rnd(i * 4.7 + x) * 6.283, pts = [[0, 0]]; let a1 = a0, r1 = 0; for (let k = 0; k < 7; k++){ r1 += E_R * (0.1 + rnd(i * 9 + k + y) * 0.1); a1 += (rnd(i * 3 + k * 5 + x) - 0.5) * 0.9; pts.push([Math.cos(a1) * Math.min(r1, E_R * 0.93), Math.sin(a1) * Math.min(r1, E_R * 0.93)]); } vn.push({pts, ph: rnd(i) * 6.28}); }
+    f.sdE = {x, y, r: E_R, t: 0, fl, vn}; puffs.push({k: 'ignite', x, y, t: 0});
   }
   // ---------------- R: Susanoo ----------------
   const D = Math.PI / 180;
@@ -5237,7 +5238,7 @@ const SD = (() => {
         if ((R.end && R.t >= R.end) || R.t > R_MAX){ f.sdR = null; f.inv = 0; f.root = 0; f.silT = 0; f.atkCd = 0.5; if (f.a3) f.a3.act = null; fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: 'SUSANOO ENDS'}); } }
     }
     for (const b of balls){ b.age += dt; b.life -= dt; b.x += b.vx * dt; b.y += b.vy * dt; const tg = foe(b.f);
-      if (tg && tg.hp > 0 && !b.dead && Math.hypot(b.x - tg.x, b.y - tg.y) < tg.r + Q_R){ b.dead = true; hit(tg, Q_DMG, b.f, b.vx / Q_SPD * 90, b.vy / Q_SPD * 90); puffs.push({k: 'boom', x: b.x, y: b.y, t: 0}); }
+      if (tg && tg.hp > 0 && !b.dead && Math.hypot(b.x - tg.x, b.y - tg.y) < tg.r + Q_R){ b.dead = true; hit(tg, Q_DMG, b.f, b.vx / Q_SPD * 230, b.vy / Q_SPD * 230); puffs.push({k: 'boom', x: b.x, y: b.y, t: 0}); }
       if (!b.dead){ for (const o of OBST) if (!o.water && !(o.ice && o.owner === b.f) && inObst(o, b.x, b.y, Q_R * 0.6)){ b.dead = true; if (o.breakable) damageObst(o, Q_DMG); puffs.push({k: 'boom', x: b.x, y: b.y, t: 0}); break; } }
       if (b.life <= 0 || b.x < 0 || b.x > W || b.y < 0 || b.y > H) b.dead = true; }
     for (let i = balls.length - 1; i >= 0; i--) if (balls[i].dead) balls.splice(i, 1);
@@ -5248,7 +5249,7 @@ const SD = (() => {
     for (const s of slashes){ const px0 = s.x, py0 = s.y; s.d += R_SPD * dt; const c = Math.cos(s.ang), sn = Math.sin(s.ang); s.x = s.x0 + c * s.d; s.y = s.y0 + sn * s.d;
       if (typeof FX3 !== 'undefined' && FX3.cutPoly && s.d > 0) FX3.cutPoly([[px0, py0], [s.x, s.y]], 2.4, 3.2, 0.6);
       const h = 52, px = -sn * h, py = c * h; s.ax = s.x - px; s.ay = s.y - py; s.bx = s.x + px; s.by = s.y + py; const tg = foe(s.f);
-      if (!s.hit && tg && tg.hp > 0 && segD(tg.x, tg.y, s.ax, s.ay, s.bx, s.by) < tg.r + 14){ s.hit = true; hit(tg, R_DMG, s.f, c * 120, sn * 120); puffs.push({k: 'boom', x: tg.x, y: tg.y, t: 0}); }
+      if (!s.hit && tg && tg.hp > 0 && segD(tg.x, tg.y, s.ax, s.ay, s.bx, s.by) < tg.r + 22){ s.hit = true; hit(tg, R_DMG, s.f, c * 120, sn * 120); puffs.push({k: 'boom', x: tg.x, y: tg.y, t: 0}); }
       if (Math.hypot(s.x - s.f.x, s.y - s.f.y) > R_R || s.f.hp <= 0) s.dead = true; }
     for (let i = slashes.length - 1; i >= 0; i--) if (slashes[i].dead) slashes.splice(i, 1);
     for (const p of puffs) p.t += dt; for (let i = puffs.length - 1; i >= 0; i--) if (puffs[i].t > 0.7) puffs.splice(i, 1);
@@ -5268,12 +5269,17 @@ const SD = (() => {
     if (!has) return;
     ctx.save();
     for (const f of sds()){ const E = f.sdE; if (!E || f.hp <= 0) continue;
-      const g = ctx.createRadialGradient(E.x, E.y, 4, E.x, E.y, E.r); g.addColorStop(0, 'rgba(1,0,6,.97)'); g.addColorStop(0.8, 'rgba(5,2,14,.96)'); g.addColorStop(1, 'rgba(10,3,26,.93)');
+      const g = ctx.createRadialGradient(E.x, E.y, 4, E.x, E.y, E.r); g.addColorStop(0, 'rgba(34,14,70,.9)'); g.addColorStop(0.7, 'rgba(22,8,50,.9)'); g.addColorStop(1, 'rgba(12,4,32,.94)');
       ctx.beginPath(); ctx.arc(E.x, E.y, E.r, 0, 7); ctx.fillStyle = g; ctx.fill();
-      const fa = Math.min(1, E.t / 0.4); for (const fl of E.fl) flame(fl.k, E.x + fl.ox, E.y + fl.oy, fl.s, fl.ph, fl.sp, fa); }
-    for (const z of zones){ const u = Math.min(1, z.t / ZONE_STRIKE), fade = z.t > ZONE_STRIKE + 0.5 ? Math.max(0, 1 - (z.t - ZONE_STRIKE - 0.5) / 0.4) : 1;
-      ctx.globalAlpha = fade; const g = ctx.createRadialGradient(z.x, z.y, 4, z.x, z.y, z.r); g.addColorStop(0, 'rgba(40,90,200,' + (0.1 + 0.14 * u) + ')'); g.addColorStop(1, 'rgba(60,130,255,' + (0.3 + 0.2 * u) + ')');
-      ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fillStyle = g; ctx.fill(); ctx.globalAlpha = 1; }
+      ctx.save(); ctx.translate(E.x, E.y); ctx.lineCap = 'round'; ctx.lineJoin = 'round';                         // purple traces running through the dark ground
+      for (const v of E.vn){ const pl = 0.55 + 0.45 * Math.sin(T * 1.3 + v.ph);
+        for (const [w, c] of [[3.5, 'rgba(110,60,230,' + 0.22 * pl + ')'], [1.2, 'rgba(190,140,255,' + 0.55 * pl + ')']]){ ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(v.pts[0][0], v.pts[0][1]); for (let k = 1; k < v.pts.length; k++) ctx.lineTo(v.pts[k][0], v.pts[k][1]); ctx.stroke(); } }
+      ctx.restore();
+      const fa = Math.min(1, E.t / 0.4), live = [];
+      for (const q of E.fl){ const tt = E.t + q.off, cyc = Math.floor(tt / q.cl), u = (tt % q.cl) / q.cl, al = u < 0.18 ? u / 0.18 : u > 0.68 ? (1 - u) / 0.32 : 1; if (al <= 0.02) continue;
+        const r = E.r * 0.92 * Math.sqrt(rnd(q.ph * 31.7 + cyc * 7.3)), an = rnd(q.ph * 17.3 + cyc * 3.1) * 6.283; live.push([Math.sin(an) * r, q, al, Math.cos(an) * r]); }
+      live.sort((a, b) => a[0] - b[0]);
+      for (const [oy, q, al, ox] of live) flame(q.k, E.x + ox, E.y + oy, q.s * (0.55 + 0.45 * al), q.ph, q.sp, fa * al); }
     for (const f of sds()){ const R = f.sdR; if (!R || f.hp <= 0) continue; const a = Math.min(1, R.t / 0.6);
       const g = ctx.createRadialGradient(f.x, f.y, 20, f.x, f.y, R_R); g.addColorStop(0, 'rgba(110,70,255,0)'); g.addColorStop(1, 'rgba(110,70,255,' + 0.22 * a + ')'); ctx.beginPath(); ctx.arc(f.x, f.y, R_R, 0, 7); ctx.fillStyle = g; ctx.fill();
       ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(180,140,255,' + 0.9 * a + ')'; ctx.shadowColor = '#9b7cff'; ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0;
@@ -5293,12 +5299,21 @@ const SD = (() => {
       ctx.rotate(an + Math.PI); ctx.drawImage(FB.img, k * FB.w, 0, FB.w, FB.h, -Math.round(FB.hx * sc), -Math.round(FB.h * sc / 2), Math.round(FB.w * sc), Math.round(FB.h * sc)); });
   }
   function proj(c, p){ return [(p.x - c.x) * CAM_Z, (p.y - c.y) * CAM_Z * TILT]; }
+  const FINC = ['#fbf4ff', '#e3c8ff', '#b27cff', '#7a3df0', '#4a1aa8', '#220a5a'];       // Sukuna's Dismantle fin, in the samurai's purple
+  const FIN_L = 150, FIN_H = 92, FP = 3;
   function drawSlash(s){
-    const c = {x: s.x, y: s.y};
-    at(c.x, c.y, () => { ctx.lineCap = 'round'; const o = proj(c, {x: s.x0, y: s.y0}), A = proj(c, {x: s.ax, y: s.ay}), B = proj(c, {x: s.bx, y: s.by}), tip = proj(c, {x: s.x + Math.cos(s.ang) * 20, y: s.y + Math.sin(s.ang) * 20}), L = -28;
-      const gr = ctx.createLinearGradient(o[0], o[1] + L, 0, L); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(190,150,255,.7)'); ctx.strokeStyle = gr; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(o[0], o[1] + L); ctx.lineTo(0, L); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(A[0], A[1] + L); ctx.quadraticCurveTo(tip[0] * 2, tip[1] * 2 + L, B[0], B[1] + L);
-      for (const [w, col] of [[13, 'rgba(120,50,255,.4)'], [6, 'rgba(165,100,255,.9)'], [2.5, '#f3eaff']]){ ctx.strokeStyle = col; ctx.lineWidth = w; ctx.stroke(); } });
+    const a = s.ang, c = Math.cos(a), sn = Math.sin(a), dl = Math.hypot(c, sn * TILT), dx = c / dl, dy = sn * TILT / dl, age = s.d / R_SPD, grow = Math.min(1, age / 0.05), seed = Math.floor(T * 24), Lw = FIN_L, Hh = FIN_H;
+    at(s.x, s.y, () => { const n = Math.floor(Lw / FP);
+      for (let i = 0; i <= n; i++){
+        const u = i / n, bx = -dx * Lw * (1 - u), by = -dy * Lw * (1 - u);
+        let h = u < 0.72 ? Hh * Math.pow(u / 0.72, 1.4) : Hh * Math.sqrt(Math.max(0, 1 - Math.pow((u - 0.72) / 0.28, 2)));
+        h *= grow * (0.85 + 0.3 * rnd(i + seed * 13));
+        for (let v = 0; v <= h; v += FP){ const ff = v / Math.max(h, 1), heat = (u * 0.9 + (1 - ff) * 0.5) - 0.35;
+          ctx.fillStyle = FINC[heat > 0.85 ? 0 : heat > 0.68 ? 1 : heat > 0.5 ? 2 : heat > 0.32 ? 3 : heat > 0.15 ? 4 : 5]; ctx.fillRect(Math.round(bx), Math.round(by - v - FP - 4), FP, FP); }
+        if (u > 0.08 && u < 0.78 && rnd(i * 3 + seed) < 0.55){ const Ls = 8 + rnd(i + seed * 5) * 26;
+          for (let q = 0; q < Ls; q += FP){ ctx.fillStyle = q < Ls * 0.4 ? FINC[2] : FINC[3 + (q > Ls * 0.75)]; ctx.fillRect(Math.round(bx - dx * q * 0.7), Math.round(by - h - FP - 4 - q), FP, FP); } }
+      }
+      for (let j = 0; j < 9; j++){ const u = rnd(j + seed * 7), bx = -dx * Lw * (1 - u * 0.8), by = -dy * Lw * (1 - u * 0.8); ctx.fillStyle = j % 2 ? FINC[1] : FINC[3]; ctx.fillRect(Math.round(bx - dx * 8), Math.round(by - Hh * u - 8 - rnd(j * 9 + seed) * 20), FP, FP); } });
   }
   function drawHolo(f){
     const R = f.sdR, img = SUSI[(f.a3 && f.a3.dir) || 'S']; if (!img || !img.complete) return;
@@ -5306,28 +5321,39 @@ const SD = (() => {
     at(f.x, f.y, () => { ctx.globalAlpha = a * 0.82 * (0.92 + 0.08 * Math.sin(T * 40)); const sc = 1.3; ctx.drawImage(img, -Math.round(img.width * sc / 2), -Math.round(160 * sc) + 6, Math.round(img.width * sc), Math.round(img.height * sc)); });
   }
   const G = 5;                                          // pixel size of the lightning
-  function boltCells(b){                                // a jagged pixel bolt from the sky with side branches; [gx, gy] cells, top to bottom
+  function boltCells(b, G = 5, topPx = 640, big = false){                                // a jagged pixel bolt from the sky with side branches; [gx, gy] cells, top to bottom
     const cells = [], seen = new Set(), put = (gx, gy) => { const k = gx * 4096 + gy; if (!seen.has(k)){ seen.add(k); cells.push([gx, gy]); } };
     const line = (x0, y0, x1, y1) => { let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, er = dx - dy, x = x0, y = y0, n = 0; while (n++ < 400){ put(x, y); if (x === x1 && y === y1) break; const e2 = 2 * er; if (e2 > -dy){ er -= dy; x += sx; } if (e2 < dx){ er += dx; y += sy; } } };
-    const seed = b.x * 1.7 + b.y * 2.3; let x = 0, y = -Math.round(640 / G), n = 0; const pts = [[x, y]];
+    const seed = b.x * 1.7 + b.y * 2.3; let x = 0, y = -Math.round(topPx / G), n = 0; const pts = [[x, y]];
     while (y < 0){ const dy = 6 + Math.floor(rnd(seed + n * 3.3) * 10), dx = Math.round((rnd(seed + n * 5.9) - 0.5) * 14); const ny = Math.min(0, y + dy); line(x, y, x + dx, ny); x += dx; y = ny; pts.push([x, y]); n++; }
     const sh = -x; for (const c of cells) c[0] += sh;                    // land exactly on the spot
-    for (let i = 2; i < pts.length - 1; i += 2){ if (rnd(seed + i * 7.1) < 0.35) continue; let bx = pts[i][0] + sh, by = pts[i][1], dir = rnd(seed + i) < 0.5 ? -1 : 1, m = 0;
+    const trunk = cells.length;
+    for (let i = 2; i < pts.length - 1; i += 2){ if (rnd(seed + i * 7.1) < (big ? 0.15 : 0.35)) continue; let bx = pts[i][0] + sh, by = pts[i][1], dir = rnd(seed + i) < 0.5 ? -1 : 1, m = 0;
       while (m < 3 + Math.floor(rnd(seed + i * 2.2) * 4) && by < -2){ const ex = bx + dir * (2 + Math.floor(rnd(seed + i + m) * 5)), ey = Math.min(-1, by + 3 + Math.floor(rnd(seed + i * m) * 6)); const l0 = cells.length; line(bx, by, ex, ey); bx = ex; by = ey; m++; } }
+    if (big){ const ex = []; for (let i = 0; i < trunk; i++){ ex.push([cells[i][0] - 1, cells[i][1]], [cells[i][0] + 1, cells[i][1]]); } for (const c of ex){ const k = c[0] * 4096 + c[1]; if (!seen.has(k)){ seen.add(k); cells.push(c); } } }
     const halo = [], core = new Set(cells.map(c => c[0] * 4096 + c[1]));
     for (const [gx, gy] of cells) for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]){ const k = (gx + ox) * 4096 + (gy + oy); if (!core.has(k)){ core.add(k); halo.push([gx + ox, gy + oy]); } }
     return {cells, halo};
   }
+  function paintBolt(c, g, head, al){
+    ctx.globalAlpha = al; ctx.fillStyle = '#0e6d86'; for (const [gx, gy] of c.halo) if (gy <= head + 2) ctx.fillRect(gx * g, gy * g, g, g);
+    ctx.fillStyle = '#78f0ff'; for (const [gx, gy] of c.cells) if (gy <= head) ctx.fillRect(gx * g - 1, gy * g - 1, g + 2, g + 2);
+    ctx.fillStyle = '#ffffff'; for (const [gx, gy] of c.cells) if (gy <= head) ctx.fillRect(gx * g, gy * g, g, g);
+  }
   function drawBolts(z){
     const q = z.t - ZONE_STRIKE; if (q < 0) return;
-    for (const b of z.bl){ if (q < b.d) continue; if (!b.c) b.c = boltCells(b); const p = Math.min(1, (q - b.d) / 0.1), al = Math.max(0, 1 - Math.max(0, q - b.d - 0.12) / 0.4), fl = 0.75 + 0.25 * Math.sin(T * 90 + b.x), head = -640 * (1 - p) / G;
-      at(b.x, b.y, () => { ctx.globalAlpha = al * fl;
-        ctx.fillStyle = '#0e6d86'; for (const [gx, gy] of b.c.halo) if (gy >= head - 2) ctx.fillRect(gx * G, gy * G, G, G);
-        ctx.fillStyle = '#78f0ff'; for (const [gx, gy] of b.c.cells) if (gy >= head) ctx.fillRect(gx * G - 1, gy * G - 1, G + 2, G + 2);
-        ctx.fillStyle = '#ffffff'; for (const [gx, gy] of b.c.cells) if (gy >= head) ctx.fillRect(gx * G, gy * G, G, G);
-        if (p >= 1){ const u = Math.min(1, (q - b.d - 0.1) / 0.25), gl = ctx.createRadialGradient(0, 0, 1, 0, 0, 40 * (0.5 + u)); gl.addColorStop(0, 'rgba(210,250,255,.9)'); gl.addColorStop(0.4, 'rgba(70,170,255,.45)'); gl.addColorStop(1, 'rgba(40,100,255,0)');
+    if (z.big){ const b = z.big; if (!b.c) b.c = boltCells({x: z.x, y: z.y}, 8, 900, true);
+      const p = Math.min(1, q / 0.07), al = Math.max(0, 1 - Math.max(0, q - 0.14) / 0.5) * (0.8 + 0.2 * Math.sin(T * 80)), head = -900 * (1 - p) / 8;
+      at(z.x, z.y, () => { paintBolt(b.c, 8, head, al);
+        if (p >= 1){ const u = Math.min(1, (q - 0.07) / 0.3), R = 150 * (0.5 + u), gl = ctx.createRadialGradient(0, 0, 2, 0, 0, R); ctx.globalAlpha = Math.max(0, 1 - u * 0.9); gl.addColorStop(0, 'rgba(235,252,255,.95)'); gl.addColorStop(0.35, 'rgba(90,190,255,.5)'); gl.addColorStop(1, 'rgba(40,100,255,0)');
+          ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(0, 0, R, R * 0.34, 0, 0, 7); ctx.fill();
+          ctx.globalAlpha = Math.max(0, 1 - u); ctx.fillStyle = '#e6fbff'; for (let k = 0; k < 14; k++){ const an = k * 0.9 + 0.3, rr = 20 + u * (70 + rnd(k) * 70); ctx.fillRect(Math.round(Math.cos(an) * rr), Math.round(Math.sin(an) * rr * 0.4 - u * 30 * rnd(k + 3)), 6, 6); } } }); }
+    for (const b of z.bl){ const q2 = q - (z.big ? 0.12 : 0); if (q2 < b.d) continue; if (!b.c) b.c = boltCells(b); const p = Math.min(1, (q2 - b.d) / 0.1), al = Math.max(0, 1 - Math.max(0, q2 - b.d - 0.12) / 0.4), fl = 0.75 + 0.25 * Math.sin(T * 90 + b.x), head = -640 * (1 - p) / G;
+      at(b.x, b.y, () => { paintBolt(b.c, G, head, al * fl);
+        if (p >= 1){ const u = Math.min(1, (q2 - b.d - 0.1) / 0.25), gl = ctx.createRadialGradient(0, 0, 1, 0, 0, 40 * (0.5 + u)); ctx.globalAlpha = al * fl; gl.addColorStop(0, 'rgba(210,250,255,.9)'); gl.addColorStop(0.4, 'rgba(70,170,255,.45)'); gl.addColorStop(1, 'rgba(40,100,255,0)');
           ctx.fillStyle = gl; ctx.beginPath(); ctx.ellipse(0, 0, 40 * (0.5 + u), 14 * (0.5 + u), 0, 0, 7); ctx.fill();
           ctx.fillStyle = '#e6fbff'; for (const [ox, oy] of [[0, 0], [-1, 0], [1, 0], [0, -1], [-2, 0], [2, 0], [0, 1]]) ctx.fillRect(ox * G, oy * G, G, G); } }); }
+    ctx.globalAlpha = 1;
   }
   function drawPuff(p){
     const u = p.t / 0.7; at(p.x, p.y, () => {
