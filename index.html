@@ -2096,8 +2096,8 @@ const SKILLS = {
   naruto: {
     // Passive Kurama's Chakra: below 15% HP (once per match) speed boost and heal to 30%. Q Rasenshuriken | W Shadow Clones | E Toad Drop | R Kurama
     q:{name:'Rasenshuriken', hud:'Rasen', cd:5, est:10, chan:0.2, cast(f,a){ NR.q(f, a); }},
-    w:{name:'Shadow Clones', hud:'Clones', cd:20, est:0, chan:0, cast(f,a){ NR.w(f); }},
-    e:{name:'Toad Drop', hud:'Toad', cd:10, est:9, chan:0.2, cast(f,a){ NR.e(f, a); }},
+    w:{name:'Shadow Clones', hud:'Clones', cd:18, est:0, chan:0, cast(f,a){ NR.w(f); }},
+    e:{name:'Toad Drop', hud:'Toad', cd:9, est:9, chan:0.2, cast(f,a){ NR.e(f, a); }},
     r:{name:'Kurama', hud:'Kurama', chan:0.6, cast(f,a){ NR.r(f); }}
   },
   jinwoo: {
@@ -2466,6 +2466,7 @@ function chg(f, k){                                // current charges of a charg
 // the caster stands still while channeling; a stun interrupts it (the cooldown is still spent)
 function chanTime(f, sk, prevLast){ const c = sk.chan; return typeof c==='function' ? c(f, prevLast) : (c===undefined ? 0.1 : c); }
 function startCast(f, sk, key, ang, stage, prevLast){
+  if (f.id==='naruto') f.nrAimP = {x: mouse.x, y: mouse.y};   // Q/E aim where the cast was released, not where the cursor is after the delay
   cast3(f, key, ang, stage, prevLast);
   const t = chanTime(f, sk, prevLast);
   if (t <= 0){ const keep = f.last; f.last = prevLast; sk.cast(f, ang, stage); f.last = key; return; }
@@ -4619,7 +4620,7 @@ const JW = (() => {
     else if (s.id === 'iron' && d < 90 + tg.r){
       s.atk = 3; strike(6 / 14, 14, () => {
         const a2 = ang(s, tg), cx = s.x + Math.cos(a2) * 62, cy = s.y + Math.sin(a2) * 62;
-        for (let k = 0; k < 7; k++){ const th = k * 0.9 + Math.random() * 0.4, l1 = 34 + Math.random() * 24, l2 = l1 + 22 + Math.random() * 26, w1 = th + (Math.random() - 0.5) * 0.5; FX3.cutPoly([[cx + Math.cos(th) * 8, cy + Math.sin(th) * 8], [cx + Math.cos(th) * l1, cy + Math.sin(th) * l1], [cx + Math.cos(w1) * l2, cy + Math.sin(w1) * l2]], 2.6, 3.2, 1.2); }   // the smash cracks and gouges the ground like Sukuna's cuts
+        smashCrack(cx, cy, 62);   // dented centre + spidery spiral cracks
         if (Math.hypot(tg.x - s.x, tg.y - s.y) < 95 + tg.r){ hit(tg, 0.6944 * SOL_UP, f); if (tg.inv <= 0 && tg.hp > 0){ tg.stun = Math.max(tg.stun, 1); fx.push({x: tg.x, y: tg.y - tg.r - 14, t: 0.7, txt: 'SLAMMED'}); } }
       });
     }
@@ -4852,6 +4853,28 @@ const JW = (() => {
   return {sol, proxyOf, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
 })();
 
+// ---------- shared ground smash mark (Iron, Kurama slam, Toad landing): dented centre + tangled spiral cracks with thin side branches ----------
+const SMASH_MARKS = [];
+function smashCrack(x, y, R){
+  SMASH_MARKS.push({x, y, R, t: 0, T: 7});
+  if (typeof FX3 === 'undefined') return;
+  const rr = (a, b) => a + Math.random() * (b - a), cut = (pts, w) => FX3.cutPoly(pts, w, 3.2, 1.0);
+  for (let k = 0; k < 3; k++){                                           // tangled dense centre: small jagged loops
+    const r0 = R * rr(0.12, 0.28), n = 9, a0 = rr(0, 6.3), pts = [];
+    for (let i = 0; i <= n; i++){ const a = a0 + i / n * 6.6, r = r0 * rr(0.75, 1.15); pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r]); }
+    cut(pts, 1.8);
+  }
+  const arms = 6 + Math.floor(Math.random() * 3);
+  for (let k = 0; k < arms; k++){                                        // random spidery spiral arms
+    const a0 = k / arms * 6.283 + rr(-0.35, 0.35), dir = Math.random() < 0.8 ? 1 : -1, L = R * rr(0.6, 1.0), curl = rr(0.8, 1.6), n = 7, pts = [];
+    for (let i = 0; i <= n; i++){ const u = i / n, a = a0 + dir * curl * u + rr(-0.12, 0.12), r = R * 0.15 + (L - R * 0.15) * u + rr(-3, 3); pts.push([x + Math.cos(a) * r, y + Math.sin(a) * r, a, r]); }
+    cut(pts.map(p => [p[0], p[1]]), 2.4);
+    for (let i = 2; i < n; i++) if (Math.random() < 0.6){                // thinner branches
+      const p = pts[i], ba = p[2] + dir * Math.PI / 2 * rr(0.35, 0.75) * (Math.random() < 0.5 ? 1 : -1), bl = R * rr(0.15, 0.32), m = [p[0] + Math.cos(ba) * bl * 0.5 + rr(-2, 2), p[1] + Math.sin(ba) * bl * 0.5 + rr(-2, 2)];
+      cut([[p[0], p[1]], m, [p[0] + Math.cos(ba + rr(-0.4, 0.4)) * bl, p[1] + Math.sin(ba + rr(-0.4, 0.4)) * bl]], 1.1);
+    }
+  }
+}
 // ---------- NARUTO: passive Kurama's Chakra (below 15% once per match: speed + heal to 30%). Q Rasenshuriken | W Shadow Clones | E Toad Drop | R Kurama (giant fox form) ----------
 const NR = (() => {
   const RQ = 300, RE = 185, CL_R = 170, W_T = 2, Q_SPD = 230, Q_R = 60, Q_DMG = 10, E_DMG = 9, E_R = 95, E_DELAY = 0.6, SLOW_T = 2.5;
@@ -4864,7 +4887,7 @@ const NR = (() => {
   const at = (wx, wy, fn) => { ctx.save(); ctx.translate(wx, wy); ctx.scale(1 / CAM_Z, 1 / (CAM_Z * TILT)); ctx.imageSmoothingEnabled = false; fn(); ctx.restore(); };
   const nrs = () => [player, enemy].filter(f => f.id === 'naruto');
   const human = f => f === player && (!bots || demo);
-  const target = f => human(f) ? {x: mouse.x, y: mouse.y} : (() => { const t = foe(f); return {x: t.x, y: t.y}; })();
+  const target = f => human(f) ? (f.nrAimP || {x: mouse.x, y: mouse.y}) : (() => { const t = foe(f); return {x: t.x, y: t.y}; })();
   const clampTo = (c, p, R) => { const dx = p.x - c.x, dy = p.y - c.y, d = Math.hypot(dx, dy); return d <= R ? {x: p.x, y: p.y} : {x: c.x + dx / d * R, y: c.y + dy / d * R}; };
   const inArena = p => ({x: Math.max(30, Math.min(W - 30, p.x)), y: Math.max(30, Math.min(H - 30, p.y))});
   function frameDraw(name, t, x, y, o){                        // draw one frame of an FX sheet standing at world (x, y)
@@ -4919,7 +4942,7 @@ const NR = (() => {
   function endForm(f){ f.nrR = 0; f.nrSh = 0; f.r = 13; f.nrGd = false; spawnFx('poof', f.x, f.y, {lift: 30, big: true}); }
   function slam(f){
     const tg = foe(f); bursts.push({x: f.x, y: f.y, t: 0, slam: true}); damageArea(f.x, f.y, SLAM_R, 8);
-    if (typeof FX3 !== 'undefined') for (let k = 0; k < 8; k++){ const th = k * 0.785 + Math.random() * 0.4, l1 = 22 + Math.random() * 16, l2 = l1 + 16 + Math.random() * 20, w1 = th + (Math.random() - 0.5) * 0.5; FX3.cutPoly([[f.x + Math.cos(th) * 6, f.y + Math.sin(th) * 6], [f.x + Math.cos(th) * l1, f.y + Math.sin(th) * l1], [f.x + Math.cos(w1) * l2, f.y + Math.sin(w1) * l2]], 2.6, 3.2, 1.2); }   // the smash leaves cracks in the ground like Iron's
+    smashCrack(f.x, f.y, SLAM_R * 0.7);
     try { play3(f, 'dash', f.aim, {dur: 0.3}); } catch (_) {}
     if (tg && tg.hp > 0){ const d = Math.hypot(tg.x - f.x, tg.y - f.y); if (d < SLAM_R + tg.r){ hit(tg, SLAM_DMG, f, (tg.x - f.x) / (d || 1) * 420, (tg.y - f.y) / (d || 1) * 420); f.hp = Math.min(f.max, f.hp + SLAM_HEAL); fx.push({x: f.x, y: f.y - 60, t: 0.7, txt: '+' + SLAM_HEAL}); } }
   }
@@ -4933,6 +4956,7 @@ const NR = (() => {
   const locked = (f, k) => f.id === 'naruto' && f.nrR > 0 && k !== 'r';
   function update(dt){
     T += dt;
+    for (let i = SMASH_MARKS.length - 1; i >= 0; i--){ SMASH_MARKS[i].t += dt; if (SMASH_MARKS[i].t > SMASH_MARKS[i].T) SMASH_MARKS.splice(i, 1); }
     for (const f of nrs()){
       const base = ROSTER.naruto.spd;
       if (f.nrSpdT > 0){ f.nrSpdT -= dt; f.spd = base * PASS_SPD; } else f.spd = base;
@@ -4958,7 +4982,7 @@ const NR = (() => {
     for (let i = toads.length - 1; i >= 0; i--){
       const o = toads[i]; o.t += dt;
       if (!o.hit && o.t >= E_DELAY){
-        o.hit = true; damageArea(o.x, o.y, E_R, 8);
+        o.hit = true; smashCrack(o.x, o.y, 55); damageArea(o.x, o.y, E_R, 8);
         const tg = foe(o.f); if (tg && tg.hp > 0 && Math.hypot(tg.x - o.x, tg.y - o.y) < E_R + tg.r){ hit(tg, E_DMG, o.f, 0, 0); tg.slowT = Math.max(tg.slowT || 0, SLOW_T); }
       }
       if (o.t > 2.4) toads.splice(i, 1);
@@ -4987,7 +5011,17 @@ const NR = (() => {
     at(o.x, o.y + yo, () => ctx.drawImage(d.img, fr * d.frameW, row * d.frameH, d.frameW, d.frameH, -d.ox, -d.oy, d.frameW, d.frameH));
   }
   function ring(x, y, R, col, al, fill){ ctx.save(); ctx.globalAlpha = al; ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, R, 0, 7); ctx.stroke(); if (fill){ ctx.globalAlpha = al * 0.25; ctx.fillStyle = col; ctx.fill(); } ctx.restore(); }
+  function dent(m){                                                  // dented crater: dark bowl, shadow on the far rim, light on the near rim
+    const fade = Math.min(1, (m.T - m.t) / 1.5), pop = Math.min(1, m.t / 0.1), r = m.R * 0.34 * (0.7 + 0.3 * pop);
+    ctx.save(); ctx.translate(m.x, m.y); ctx.globalAlpha = fade;
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 1.25); g.addColorStop(0, 'rgba(6,4,4,.85)'); g.addColorStop(0.7, 'rgba(10,6,6,.6)'); g.addColorStop(1, 'rgba(10,6,6,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, 7); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,.65)'; ctx.beginPath(); ctx.arc(0, 0, r, Math.PI * 0.95, Math.PI * 1.9); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.22)'; ctx.beginPath(); ctx.arc(0, 0, r, -Math.PI * 0.05, Math.PI * 0.9); ctx.stroke();
+    ctx.restore();
+  }
   function ground(){
+    for (const m of SMASH_MARKS) dent(m);
     for (const o of toads){
       if (o.t < E_DELAY){ const k = Math.min(3, Math.floor(o.t / 0.15)); frameDraw('toad_shadow', k * 0.125, o.x, o.y, {}); }
     }
@@ -5012,7 +5046,7 @@ const NR = (() => {
       const k = Math.max(0, f.nrSh) / SH_MAX; at(f.x, f.y, () => { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(-26, -76, 52, 6); ctx.fillStyle = '#ffb040'; ctx.fillRect(-25, -75, 50 * k, 4); ctx.fillStyle = '#ff6a1f'; ctx.fillRect(-25, -70, 50 * (f.nrR / R_T), 2); });
     }
   }
-  function reset(){ clones.length = 0; fxs.length = 0; toads.length = 0; bursts.length = 0; for (const f of [player, enemy]){ f.nrR = f.nrSh = f.nrW = f.nrSpdT = 0; f.nrP = false; } }
+  function reset(){ SMASH_MARKS.length = 0; clones.length = 0; fxs.length = 0; toads.length = 0; bursts.length = 0; for (const f of [player, enemy]){ f.nrR = f.nrSh = f.nrW = f.nrSpdT = 0; f.nrP = false; } }
   function bot(f, o, dist, ea){
     if (f.nrR > 0) return;
     if (f.ult >= 100 && dist < 320 && castSkill(f, 'r', ea)) return;
