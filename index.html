@@ -2966,6 +2966,14 @@ function runAI(f, o, dt){
     o = Object.assign(Object.create(o), {x:ls.x, y:ls.y, vx:0, vy:0});
   } else f.lastSeen = {x:o.x, y:o.y};
   const ea = Math.atan2(o.y-f.y, o.x-f.x), dist = Math.hypot(o.x-f.x, o.y-f.y);
+  if (botDiff(f)===DIFF.hard && o.id==='denji' && o.djW && f.stun<=0 && f.root<=0 && !f.chan){   // Hard: Denji in Feral (frenzy) never misses in melee -> don't fight him up close, run
+    if (f.dashT>0){ f.dashT -= dt; return; }          // let the dash finish
+    const cx = W/2-f.x, cy = H/2-f.y, cl = Math.hypot(cx,cy)||1;
+    let ax = -Math.cos(ea) + cx/cl*0.5, ay = -Math.sin(ea) + cy/cl*0.5; const al = Math.hypot(ax,ay)||1;
+    f.aim = ea; f.vx = ax/al*f.spd; f.vy = ay/al*f.spd;
+    if (dist < 170 && f.dashCd<=0 && f.dashT<=0){ f.dashT = 0.15; f.inv = 0.3; f.dashCd = 1.2; f.vx = ax/al*620; f.vy = ay/al*620; }
+    return;
+  }
   if (f.id==='zenitsu' && f.zChain>0 && f.stun<=0 && f.root<=0 && !f.lunge && o.stun>0.05 && dist > 90 && dist < ZE_LEN - 30 && (f.e2>0 || f.cd.e<=0)){   // ult landed: Sixfold (middle) to chain the stun
     if (castSkill(f, 'e', ea)){ f.zChain = 0; return; }
   }
