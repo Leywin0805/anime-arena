@@ -285,7 +285,7 @@ function cast3(f, key, ang, stage, prevLast){       // which animation goes with
     else play3(f, key, ang, {dur:0.35});
   } else if (f.id==='denji'){
     if (key==='w'){ const tg0 = foe(f); f.djPre = 0.5; play3(f, 'cs_w_start', Math.atan2(tg0.y-f.y, tg0.x-f.x), {dur:0.5}); }
-    else if (key==='e') play3(f, 'e_blood', ang, {dur:0.7});
+    else if (key==='e'){ play3(f, 'e_blood', ang, {dur:0.2}); if (f.a3 && f.a3.act) f.a3.act.spd = 3.5; }
     else if (key==='r') play3(f, 'r_cast', ang, {dur:0.5});
   } else if (f.id==='sasuke'){
     if (key==='q') play3(f, 'q_fire', ang, {dur:1.5});
@@ -2150,12 +2150,12 @@ const SKILLS = {
   },
   denji: {
     // Passive Bleed: every hit makes the enemy bleed (Todoroki burn). No new bleed while bleeding. He heals by walking through the blood pool left where it started
-    // Q: Chainsaw Spin: Whirlpool without the knock-up, -20% damage, 2s
+    // Q: Chainsaw Spin: Whirlpool without the knock-up, -20% damage, 3s
     q:{name:'Chainsaw Spin', hud:'Spin', cd:12, est:4, chan:0, cast(f,a){ DJ.q(f); }},
     // W: Feral: 5s uncontrollable chase on the enemy, a never-missing hit every 0.7s that heals him; a stun ends it
     w:{name:'Feral', hud:'Feral', cd:15, est:16, chan:0.5, cast(f,a){ DJ.w(f); }},
     // E: Bloodlust: enemy has more HP = more damage + 4s bleed; less HP = +30% speed and -20% damage taken (5s)
-    e:{name:'Bloodlust', hud:'Bloodlust', cd:14, est:0, chan:0.35, cast(f,a){ DJ.e(f); }},
+    e:{name:'Bloodlust', hud:'Bloodlust', cd:14, est:0, chan:0.2, cast(f,a){ DJ.e(f); }},
     // R: Makima's Command: giant projectile marks the enemy (6s). Recast: teleport and slam: fear 1.2s + a healing blood puddle
     r:{name:"Makima's Command", hud:'Command', label:f => f.djMark>0 ? 'RECAST' : 'COMMAND', chan:0.34, cast(f,a){ DJ.r(f); }}
   },
@@ -2591,6 +2591,7 @@ function castSkill0(f, key, ang){
   else if (sk.charges){ if (chg(f,key)<=0) return false; f.ch[key]--; if (f.cd[key]<=0) f.cd[key] = skCd(f,key); }
   else { if (f.cd[key]>0 && !(key==='e' && fluxLock(f))) return false; f.cd[key] = sk.cd; }   // Constant Flux: free on a knocked-up enemy
   if (f.id==='tanjiro' && key!=='w') f.wpT = 0;      // any other ability ends Whirlpool
+  if (f.id==='denji' && key!=='q') DJ.endQ(f);        // any other ability cuts Chainsaw Spin short
   startCast(f, sk, key, ang, undefined, prevLast);
   f.last = key; f.castN = (f.castN||0) + 1;
   f.commitT = Math.max(f.commitT||0, (COMMIT[f.id]||{})[key] || 0);   // window where they're committed to a cast
@@ -5475,9 +5476,9 @@ const SD = (() => {
 const DJ = (() => {
   const has = typeof document !== 'undefined' && !!document.createElement;
   const AA_MUL = 0.85, BLEED_T = 2, BLEED_T_E = 4, BLEED_TICK = 0.25;
-  const Q_T = 2, Q_DMG = WP_DMG * 0.8, Q_HITS = [0.25, 0.75, 1.25, 1.75];
-  const W_T = 5, W_SPD = 1.5, W_EVERY = 0.7, W_ANIM = 0.3, W_DMG = 5, W_PRE = 0.5;
-  const E_T = 5, E_DMG = 1.25, E_SPD = 1.3, E_DEF = 0.8;
+  const Q_T = 3, Q_DMG = 3, Q_HITS = [0.25, 0.75, 1.25, 1.75, 2.25, 2.75];
+  const W_T = 5, W_SPD = 1.6, W_EVERY = 0.7, W_ANIM = 0.3, W_DMG = 5, W_PRE = 0.5;
+  const E_T = 5, E_DMG = 1.25, E_SPD = 1.4, E_DEF = 0.5;
   const R_SPD = 1100, R_RAD = 30, R_LIFE = 0.9, R_MARK = 6, R_DMG = 12, R_FEAR = 1.2, R_HEAL = 10, R_GAP = 64, R_SLAM = 0.5;
   const FEAR_SPD = 0.2, POOL_R = 40, POOL_LIFE = 10, POOL_MAX = 8;
   const pools = [], shots = [], puffs = [];
@@ -5503,6 +5504,7 @@ const DJ = (() => {
   }
   // ---------------- abilities ----------------
   function q(f){ f.djQ = Q_T; f.djQt = 0; f.djQn = 0; f.wpT = Q_T; fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: 'CHAINSAW'}); }
+  function endQ(f){ if (f.djQ > 0){ f.djQ = 0; f.wpT = 0; } }
   function w(f){
     const tg = foe(f); if (!tg || tg.hp <= 0) return;
     f.djPre = 0; f.djW = {t: 0, hitT: 0, atk: 0, n: 0}; f.djQ = 0; f.wpT = 0;
@@ -5560,17 +5562,19 @@ const DJ = (() => {
       if (f.djQ > 0){
         f.djQt += dt; f.wpT = Math.max(f.wpT, 0.05);
         while (f.djQn < Q_HITS.length && f.djQt >= Q_HITS[f.djQn]){ f.djQn++;
-          if (tg && tg.hp > 0 && tg.inv <= 0 && dist(f, tg) < f.r + tg.r + 22){ hit(tg, Q_DMG, f); puffs.push({k: 'ring', x: f.x, y: f.y, t: 0}); } }
+          if (tg && tg.hp > 0 && tg.inv <= 0 && dist(f, tg) < f.r + tg.r + 40){ hit(tg, Q_DMG, f); puffs.push({k: 'ring', x: f.x, y: f.y, t: 0}); } }
         if (f.djQt >= Q_T){ f.djQ = 0; f.wpT = 0; }
       }
       if (f.djW){
         const F = f.djW; F.t += dt;
-        f.root = Math.max(f.root, 0.08); f.silT = Math.max(f.silT || 0, 0.08); f.atkCd = Math.max(f.atkCd, 0.08); f.dashCd = Math.max(f.dashCd, 0.08); f.aimK = null;
+        f.root = Math.max(f.root, 0.08); f.silT = Math.max(f.silT || 0, 0.08); f.atkCd = Math.max(f.atkCd, 0.08); f.aimK = null;
         if (human(f)) moveTarget = null;
         if (!tg || tg.hp <= 0 || F.t >= W_T){ f.djW = null; fx.push({x: f.x, y: f.y - f.r - 16, t: 0.8, txt: 'FERAL OVER'}); if (human(f)) moveTarget = null; }
         else {
           const a = ang(f, tg), d = dist(f, tg), reach = f.r + tg.r + 30; faceTo(f, a); f.aim = a;
           if (F.atk > 0) F.atk -= dt;
+          if (human(f) && keys[KB.dash] && f.dashCd <= 0 && d > 20){ f.dashT = 0.15; f.dashCd = 1.2; F.dash = 0.15; }   // Space still dashes during Feral (toward the enemy)
+          if (F.dash > 0){ F.dash -= dt; const s2 = Math.min(Math.max(0, d - reach + 2), 620 * dt); moveSolid(f, Math.min(W - f.r, Math.max(f.r, f.x + Math.cos(a) * s2)), Math.min(H - f.r, Math.max(f.r, f.y + Math.sin(a) * s2))); }
           if (d > reach && !(F.atk > 0)){
             const s = Math.min(d - reach + 2, f.spd * W_SPD * (f.slowT > 0 ? 0.4 : 1) * (f.sdSlow || 1) * dt);
             moveSolid(f, Math.min(W - f.r, Math.max(f.r, f.x + Math.cos(a) * s)), Math.min(H - f.r, Math.max(f.r, f.y + Math.sin(a) * s))); F.hitT = 0;
@@ -5674,7 +5678,7 @@ const DJ = (() => {
     pools.length = shots.length = puffs.length = 0;
     for (const f of [player, enemy]){ f.djQ = 0; f.djQt = 0; f.djQn = 0; f.djW = null; f.djPre = 0; f.djSlam = 0; f.djMark = 0; f.djE = null; f.djBleed = null; f.djFear = 0; f.djSpd = 1; if (f.id === 'denji') f.wpT = 0; }
   }
-  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, bleed, dealMul, takeMul, q, w, e, r, recast, isCS};
+  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, bleed, endQ, dealMul, takeMul, q, w, e, r, recast, isCS};
 })();
 
 function draw(){
