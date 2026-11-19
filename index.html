@@ -1583,7 +1583,7 @@ function doAutoNow(f){                            // swing + set the auto cooldo
 var AA_FORCE = false, AA_NOANIM = false, AA_FIT = 0;
 const AA_WIND = 0.3, AA_RE = /^(auto|cleave)/;
 const aimA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a))*255).toString(16).padStart(2, '0');
-function aaReach(f){ return f.id==='naruto' && f.nrR > 0 ? 70 : f.id==='todoroki' ? 170 : f.id==='reze' ? 380 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
+function aaReach(f){ return f.id==='naruto' && f.nrR > 0 ? 70 : f.id==='todoroki' ? 170 : f.id==='reze' ? 266 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
 function inAAR(f, tg){ return !!tg && tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) <= aaReach(f) + tg.r; }
 function aaCands(f){                                // everything an auto can hit: the enemy and, for Jin-Woo, his shadows
   const e = f===player ? enemy : player, out = [];
@@ -1743,7 +1743,7 @@ function aimSpec(f, k){
     return f.djMark>0 ? [{t:'target', tg, col:'#ffd060'}] : [{t:'line', range:1000, w:56, col:'#ff3b3b'}];
   }
   if (id==='reze'){
-    if (k==='q') return [{t:'dash', range:RZ.Q_RANGE, w:34, col:'#ff9a2a'}, {t:'self', r:RZ.Q_R, adv:RZ.Q_RANGE, col:'#ff9a2a', faint:true}];
+    if (k==='q'){ const qd = RZ.qDist(f); return [{t:'self', r:RZ.Q_RANGE, col:'#ff9a2a', faint:true}, {t:'dash', range:qd, w:34, col:'#ff9a2a'}, {t:'self', r:RZ.Q_R, adv:qd, col:'#ffd27a'}]; }   // max range ring, the real jump line, the landing blast
     if (k==='w') return [{t:'self', r:RZ.W_R, col:'#ff9a2a'}];
     if (k==='e') return [{t:'target', tg, col:'#ff7a1f'}];
     return [{t:'cone', range:RZ.R_L, half:RZ.R_HALF, col:'#ffd27a'}];
@@ -5723,7 +5723,7 @@ const DJ = (() => {
 // R: point-blank blast in a 90 degree cone (Bakugo Q size): knocks back and stuns 1.5s.
 const RZ = (() => {
   const has = typeof document !== 'undefined' && !!document.createElement;
-  const AA_RANGE = 380, E_RANGE = 440;
+  const AA_RANGE = 266, E_RANGE = 308;                 // -30%
   const AA_DMG = 3, HEAD_DMG = 7, HEAD_KB = 420, E_DMG = 2;
   const AA_SPD = 760, HEAD_SPD = 560, E_SPD = 680;
   const MARK_T = 2, FUSE_N = 4, FUSE_DMG = 6, FUSE_SLOW = 0.8, FUSE_T = 2, FUSE_R = 70;
@@ -5778,6 +5778,7 @@ const RZ = (() => {
     const tg0 = foe(f);
     f.rzAimP = (f === player && !bots && !demo) ? {x: mouse.x, y: mouse.y} : {x: tg0.x, y: tg0.y};
   }
+  function qDist(f){ const p = (f === player && !bots && !demo) ? {x: mouse.x, y: mouse.y} : {x: foe(f).x, y: foe(f).y}; return Math.min(Q_RANGE, Math.hypot(p.x - f.x, p.y - f.y)); }   // how far the jump really goes
   function eOk(f){ const tg = live(foe(f)); if (!tg) return false; if (dist(f, tg) > E_RANGE + tg.r){ if (f === player && !bots) say(f, 0.6, 'OUT OF RANGE'); return false; } return true; }
   function q(f){
     const p = f.rzAimP || {x: mouse.x, y: mouse.y};
@@ -5929,19 +5930,19 @@ const RZ = (() => {
     else { ctx2.fillStyle = 'rgba(255,140,30,.85)'; ctx2.beginPath(); ctx2.moveTo(cx - 14, cy); ctx2.arc(cx - 14, cy, 30, -0.78, 0.78); ctx2.closePath(); ctx2.fill(); fire(cx - 6, cy, 12, 0.95); ctx2.strokeStyle = '#fff1c2'; ctx2.lineWidth = 2; ctx2.beginPath(); ctx2.arc(cx - 14, cy, 26 + 2 * Math.sin(T2 * 6), -0.7, 0.7); ctx2.stroke(); }
   }
   // ---------------- bot ----------------
-  function style(f, o){ return {range: 300, strafe: 80}; }
+  function style(f, o){ return {range: 210, strafe: 80}; }
   function bot(f, o, d, ea){
     if (f.chan || f.lunge) return;
     if (f.ult >= 100 && d < R_L - 20 && castSkill(f, 'r', ea)) return;
     if (d < W_R * 0.5 + 20 && f.cd.w <= 0 && castSkill(f, 'w', ea)) return;
-    if (d > 180 && d < Q_RANGE - 40 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
+    if (d > 150 && d < Q_RANGE - 40 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
     if (d < E_RANGE - 20 && f.cd.e <= 0 && castSkill(f, 'e', ea)) return;
   }
   function reset(){
     shots.length = puffs.length = 0;
     for (const f of [player, enemy]){ f.rzN = 0; f.rzQ = 0; f.rzEW = 0; f.rzMarks = null; f.rzSlowT = 0; f.rzSlow = 1; f.rzAimP = null; }
   }
-  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, auto, aim, eOk, q, w, e, r, AA_RANGE, E_RANGE, Q_RANGE, Q_R, W_R, R_L, R_HALF, Q_AS};
+  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, auto, aim, eOk, q, w, e, r, AA_RANGE, E_RANGE, Q_RANGE, qDist, Q_R, W_R, R_L, R_HALF, Q_AS};
 })();
 
 function draw(){
