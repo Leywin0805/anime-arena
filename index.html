@@ -7582,7 +7582,7 @@ const MENU = (() => {
       const f0 = seg.f0 || 0, f1 = seg.f1 != null ? seg.f1 : A.n - 1,
         fr = seg.hold ? 0 : seg.still ? (seg.f0 || 0) : (seg.spin || seg.loop) ? Math.floor(lt * A.fps) % A.n : f0 + Math.min(f1 - f0, Math.floor(seg.fit ? lt / seg.fit * (f1 - f0 + 1) : lt * A.fps));
       if (O.rot){ c.save(); c.translate(OX + 22 + O.dx, OY + 34 + O.dy); c.rotate(O.rot); c.drawImage(A.img, fr * SP.FW, row * SP.FH, SP.FW, SP.FH, -22, -34, 44, 72); c.restore(); }
-      else { const bb = seg.hold ? ([1, 2].includes(Math.floor(t * 6) % 6) ? 1 : 0) : 0;            // held pose: breathe like Naruto's idle: 6 frames at 6 fps, up 1px on frames 1-2 (1px rise/fall, feet stay put)
+      else { const bb = (seg.hold || A.n === 1 || (POSES[V.id] && POSES[V.id][seg.name])) ? ([1, 2].includes(Math.floor(t * 6) % 6) ? 1 : 0) : 0;            // held pose: breathe like Naruto's idle: 6 frames at 6 fps, up 1px on frames 1-2 (1px rise/fall, feet stay put)
         c.drawImage(A.img, fr * SP.FW, row * SP.FH, SP.FW, SP.FH, OX + O.dx, OY + O.dy - bb, 44, 72 + bb); }
     }
     for (const o of fxl) o.fn(cx1, o.sg, lt, 'post'); fadeLayer(LAY[1]); c.drawImage(LAY[1], 0, 0);
