@@ -2910,7 +2910,10 @@ function botDash(f, ea, dist){                     // dodge projectiles, Red and
       b.seen = true;                                // one roll per projectile
       const bg = !!(b.aura || b.track || b.stun || b.air || b.dmg >= 4 || (b.knock||0) >= 300);   // a big ability (Purple, Blue, Air Force, heavy hits)
       const sk = f.id==='sukuna' && bg && chg(f,'w')>0 && o.id!=='gojo' && o.id!=='bakugo';   // Sukuna watches for these with a Cleave saved
-      if (Math.random() < Math.min(0.97, dodgeP(f, bulletRating(b)) + (sk ? 0.15 : 0))){ dodge = Math.atan2(b.vy,b.vx) + (Math.random()<0.5?1:-1)*Math.PI/2; big = bg; }
+      let okD;
+      if (b.snake){ const t = f.mkT || 0; if (!f.snk || f.snk.src !== b.src || t - f.snk.t > 1.0) f.snk = {t, src: b.src, ok: Math.random() < dodgeP(f, 2)}; okD = f.snk.ok; }   // one read for the whole spider
+      else okD = Math.random() < Math.min(0.97, dodgeP(f, bulletRating(b)) + (sk ? 0.15 : 0));
+      if (okD){ dodge = Math.atan2(b.vy,b.vx) + (Math.random()<0.5?1:-1)*Math.PI/2; big = bg; }
       break;
     }
   }
@@ -2936,7 +2939,7 @@ function bakugoTank(f, o, dist){                   // big damage incoming? torna
 function counterBakugo(f, o, dist, dt){            // counterplay: look away from Grenade, keep off E autos
   if (o.id!=='bakugo') return;
   const diving = o.phase==='burst' || o.eAuto>0;    // predict: he Grenades when he dives in with Blast
-  if (o.cd.q<=0 && dist<150 && !f.lookRolled){ f.lookRolled = true; if (Math.random() < (diving ? 0.20 : 0.10)) f.lookT = 0.45; }   // hard to time
+  if (o.cd.q<=0 && dist<150 && !f.lookRolled){ f.lookRolled = true; if (Math.random() < (diving ? 0.20 : 0.10) * DODGE_BASE[botTier(f)] / 0.7) f.lookT = 0.45; }   // hard to time
   if (f.id==='tanjiro' && o.cd.q<=0 && dist<170 && o.phase==='burst' && (o.cs===4 || o.cs===5) && !f.readRolled){   // Tanjiro reads the dive: Grenade comes right after the Blast auto
     f.readRolled = true; if (Math.random() < dodgeP(f,3)) f.lookT = 0.6;
   }
@@ -2982,7 +2985,7 @@ const MATCH = (() => {
   const SHOT = {gojo:['q','w'], bakugo:['q','w'], sukuna:['q','e'], midoriya:['q','e'], todoroki:['q','w','e'], naruto:['q','e'], sasuke:['q','e'], reze:['q','w'], power:['q','e'], jinwoo:['e'], zenitsu:['e']};   // skillshots / area casts the Sharingan can eat
   const PROJ = {gojo:['q','w'], bakugo:['w'], sukuna:['q','e'], midoriya:['e'], todoroki:['w'], naruto:['q'], sasuke:['q']};   // projectiles Whirlpool / Chainsaw Spin can block
   const BAIT = {gojo:'w', bakugo:'w', sukuna:'q', midoriya:'e', todoroki:'w', naruto:'q', sasuke:'q', reze:'q', power:'q', jinwoo:'e', zenitsu:'e'};   // cheapest shot: thrown first to burn a Sharingan / pop clones / break a heal
-  const STUN = {gojo:[['q',340]], todoroki:[['q',320]], bakugo:[['q',120]], midoriya:[['q',170]], reze:[['w',75]], naruto:[['e',280]], zenitsu:[['w',400]], power:[['e',200]], sukuna:[['q',330]], tanjiro:[['q',75]], sasuke:[['w',500]]};   // [skill, range]: CC that stops a commit
+  const STUN = {gojo:[['e',260],['q',340]], todoroki:[['q',320]], bakugo:[['q',120]], midoriya:[['q',170]], reze:[['w',75]], naruto:[['e',280]], zenitsu:[['w',400]], power:[['e',200]], sukuna:[['q',330]], tanjiro:[['q',75]], sasuke:[['w',500]]};   // [skill, range]: CC that stops a commit
   const RANK = {denji:5, power:4, tanjiro:4, sukuna:3};                      // who wins a long brawl
   const away = (f, ang) => { f.vx = Math.cos(ang)*f.spd; f.vy = Math.sin(ang)*f.spd; };
   const dash = (f, ang) => { if (f.dashCd<=0 && f.dashT<=0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(ang)*620; f.vy = Math.sin(ang)*620; return true; } return false; };
@@ -2992,6 +2995,8 @@ const MATCH = (() => {
     if (o.infT>0 && dist < INF_R + 90 && know(f,'inf','basic')) return true;                                              // Infinity: nothing gets through, nobody walks in
     if (o.wpT>0 && (o.id==='tanjiro' || o.id==='denji') && pj.includes(key) && know(f,'wp','adv')) return true;            // Whirlpool / Chainsaw Spin eat shots
     if (o.id==='sasuke' && !(o.sdPass>0) && !(o.stun>0) && sh.includes(key) && key!==BAIT[f.id] && know(f,'sh','adv')) return true;   // Sharingan ready: bait it with the cheap shot first
+    if (o.sdR && sh.includes(key) && know(f,'sus','basic')) return true;                                                  // Susanoo: untouchable, wait it out
+    if (o.inv>0.25 && sh.includes(key) && know(f,'inv','basic')) return true;                                              // long invulnerability (flip, pull, flight): do not waste the shot
     if (f.id==='gojo' && o.id==='levi' && key==='e' && !(o.lvR || o.lunge) && dist>170 && know(f,'lv','adv')) return true;   // keep Infinity for the R pull
     return false;
   }
@@ -2999,6 +3004,75 @@ const MATCH = (() => {
     f.mkT = (f.mkT||0) + dt;
     if (!botControlled(f) || f.hp<=0 || f.stun>0 || f.root>0 || f.chan || f.lunge || f.fly || f.howT>=0) return false;
     const out = ea + Math.PI;
+    const toCenter = () => { const cx = W/2-f.x, cy = H/2-f.y, cl = Math.hypot(cx,cy)||1; let ax = Math.cos(out) + cx/cl*0.5, ay = Math.sin(out) + cy/cl*0.5; return Math.atan2(ay, ax); };
+    const hz = [];                                                                                                          // delayed ground hits: step out of them (dash first)
+    if (typeof SD!=='undefined' && SD.hazards) hz.push(...SD.hazards(f));
+    if (typeof NR!=='undefined' && NR.hazards) hz.push(...NR.hazards(f));
+    if (typeof PW!=='undefined' && PW.hazards) hz.push(...PW.hazards(f));
+    f.hzOk = f.hzOk || new WeakMap();
+    for (const h of hz){
+      if (!f.hzOk.has(h.ref)) f.hzOk.set(h.ref, Math.random() < dodgeP(f, h.rating));                                       // one read per hazard, by tier
+      if (f.hzOk.get(h.ref) && Math.hypot(f.x-h.x, f.y-h.y) < h.r){ const a = Math.atan2(f.y-h.y, f.x-h.x); if (!dash(f, a)) away(f, a); return true; }
+    }
+    for (const z of zones){                                                                                                 // Zenitsu Sixfold: leave the triangle before it closes
+      if (z.kind!=='sixfold' || z.src.team===f.team || z.done || !z.P) continue;
+      if (!f.hzOk.has(z)) f.hzOk.set(z, Math.random() < dodgeP(f, 2));
+      if (!f.hzOk.get(z)) continue;
+      const P = z.P, sg = (a,b,c) => (a[0]-c[0])*(b[1]-c[1]) - (b[0]-c[0])*(a[1]-c[1]), q = [f.x, f.y], d1 = sg(q,P[0],P[1]), d2 = sg(q,P[1],P[2]), d3 = sg(q,P[2],P[0]);
+      if (!((d1<0 || d2<0 || d3<0) && (d1>0 || d2>0 || d3>0))){ const gx = (P[0][0]+P[1][0]+P[2][0])/3, gy = (P[0][1]+P[1][1]+P[2][1])/3, a = Math.atan2(f.y-gy, f.x-gx); if (!dash(f, a)) away(f, a); return true; }
+    }
+    if (o.id==='naruto' && o.nrW>0 && dist < 520 && know(f,'nw','adv')){                                                   // Shadow Clones: 2s window, long cooldown: run, then punish
+      const a = toCenter(); if (dist < 230) dash(f, a); away(f, a); return true; }
+    if ((o.id==='tanjiro' || o.id==='denji') && o.wpT>0 && dist < 300 && (STYLE[f.id]||{range:55}).range > 60 && know(f,'wp2','adv')){   // ranged vs Whirlpool / Spin: shots are eaten, he is fast: get away
+      const a = toCenter(); if (dist < 140) dash(f, a); away(f, a); return true; }
+    // ---- batch 2: per-character counters ----
+    const fly = o.fly && o.fly.tx !== undefined ? o.fly : null;
+    if (fly && o.id==='bakugo' && Math.hypot(f.x-fly.tx, f.y-fly.ty) < HOW_LAND_R + f.r + 25 && (f.hzOk.has(fly) ? f.hzOk.get(fly) : (f.hzOk.set(fly, Math.random() < dodgeP(f, 4)), f.hzOk.get(fly)))){   // Howitzer flight: leave the landing circle
+      const a = Math.atan2(f.y-fly.ty, f.x-fly.tx); if (!dash(f, a)) away(f, a); return true; }
+    if (o.id==='bakugo' && o.howT>=0 && dist < HOW_R + 90 && know(f,'tor','adv')){ const a = toCenter(); dash(f, a); away(f, a); return true; }   // tornado up: slow + launch coming, get out
+    const lg = o.lunge && o.lunge.rz ? o.lunge : null;
+    if (lg && Math.hypot(f.x-lg.tx, f.y-lg.ty) < 100 + f.r*0.5 + 20 && (f.hzOk.has(lg) ? f.hzOk.get(lg) : (f.hzOk.set(lg, Math.random() < dodgeP(f, 2)), f.hzOk.get(lg)))){   // Reze Blast Off: do not be under the landing
+      const a = Math.atan2(f.y-lg.ty, f.x-lg.tx); if (!dash(f, a)) away(f, a); return true; }
+    for (const z of zones){                                                                                                 // Todoroki Ice Wall: stun if hit dead centre, step off the line
+      if (z.kind!=='icewall' || !z.src || z.src.team===f.team || z.done) continue;
+      const ux = Math.cos(z.a), uy = Math.sin(z.a), rx = f.x - z.x, ry = f.y - z.y, al = rx*ux + ry*uy, pe = -rx*uy + ry*ux;
+      if (al > z.front - 40 && al < z.front + 170 && Math.abs(pe) < 60){
+        if (!f.hzOk.has(z)) f.hzOk.set(z, Math.random() < dodgeP(f, 3));
+        if (f.hzOk.get(z)){ const a = Math.atan2(uy, ux) + (pe >= 0 ? 1 : -1)*Math.PI/2; if (!dash(f, a)) away(f, a); return true; } }
+    }
+    if (o.lvQ && know(f,'lq','adv')){                                                                                       // Levi ODM swing: his circle spins through anyone on it
+      const Q = o.lvQ, dd = Math.hypot(f.x-Q.ax, f.y-Q.ay);
+      if (Math.abs(dd - Q.rad) < 75){ const a = Math.atan2(f.y-Q.ay, f.x-Q.ax) + (dd < Q.rad ? Math.PI : 0); if (!dash(f, a)) away(f, a); return true; } }
+    if (o.id==='midoriya' && o.tether && o.tether.its && o.tether.its.some(it => it.fi === f) && know(f,'whip','adv')){      // Black Whip on me: past 7m it snaps, so run
+      const a = toCenter(); dash(f, a); away(f, a); return true; }
+    if ((o.zHold>0 || (o.lunge && o.lunge.ghost && o.id==='zenitsu' && dist<260)) && o.id==='zenitsu' && f.id!=='gojo' && f.id!=='midoriya' && f.id!=='bakugo' && !f.zRolled){   // Zenitsu charging a line: sidestep it
+      const need = Math.max(0, Math.min(1, (dist + 80 - ZQ_MIN)/(ZQ_MAX - ZQ_MIN)));
+      if (o.zHold >= need - 0.15 || o.lunge){ f.zRolled = true;
+        if (Math.random() < dodgeP(f, 3)){ const sa = ea + (Math.random()<0.5?1:-1)*Math.PI/2; if (!dash(f, sa)) away(f, sa); return true; } } }
+    if (!(o.zHold>0) && !o.lunge) f.zRolled = false;
+    const smk = zones.find(z => z.kind==='smoke' && z.src && z.src.team!==f.team);
+    if ((isHidden(o, f) || (smk && Math.hypot(f.x-smk.x, f.y-smk.y) < smk.r + 120)) && dist < 360 && know(f,'smoke','basic')){                       // enemy invisible in smoke: ranged get out of reach
+      const a = toCenter(); if (dist < 170) dash(f, a); away(f, a); return true; }
+    const ch = o.chan && o.chan.key && o.chan.ang !== undefined ? o.chan : null;
+    if (ch){                                                                                                                // read the wind-up, move by tier odds (one roll per cast)
+      const rd = rating => { if (!f.hzOk.has(ch)) f.hzOk.set(ch, Math.random() < dodgeP(f, rating)); return f.hzOk.get(ch); };
+      const ux = Math.cos(ch.ang), uy = Math.sin(ch.ang), rx = f.x-o.x, ry = f.y-o.y, al = rx*ux + ry*uy, pe = -rx*uy + ry*ux;
+      const side = () => { const a = ch.ang + (pe >= 0 ? 1 : -1)*Math.PI/2; if (!dash(f, a)) away(f, a); return true; };
+      const radial = () => { const a = Math.atan2(ry, rx); if (!dash(f, a)) away(f, a); return true; };
+      if (o.id==='reze' && ch.key==='w' && dist < RZ.W_R + f.r + 25 && rd(2)) return radial();                             // Hero Slam: stun ring around her
+      if (o.id==='reze' && ch.key==='r' && dist < RZ.R_L + f.r + 20 && Math.abs(Math.atan2(pe, al)) < RZ.R_HALF + 0.35 && rd(3)) return side();   // Bomb Burst: knockback cone (ult)
+      if (o.id==='power' && ch.key==='q' && al > 0 && al < PW.Q_L + 30 && Math.abs(pe) < PW.Q_HW + f.r + 10 && rd(3)) return side();               // Blood Spikes: rectangle ahead
+      if (o.id==='sasuke' && ch.key==='e' && dist < SD.E_RANGE && rd(1)) return radial();                                  // Amaterasu: black fire drops where I stand
+    }
+    const pl = o.lunge && o.lunge.pw ? o.lunge : null;                                                                      // Power Blood Hammer: hop, then the slam lands ahead of him
+    if (pl){
+      const cx = pl.tx + Math.cos(o.aim||0)*PW.E_IMP, cy = pl.ty + Math.sin(o.aim||0)*PW.E_IMP;
+      if (Math.hypot(f.x-cx, f.y-cy) < PW.E_R + f.r*0.5 + 12){
+        if (!f.hzOk.has(pl)) f.hzOk.set(pl, Math.random() < dodgeP(f, 3));
+        if (f.hzOk.get(pl)){ const a = Math.atan2(f.y-cy, f.x-cx); if (!dash(f, a)) away(f, a); return true; } }
+    }
+    if (o.id==='reze' && f.rzMarks && f.rzMarks.length >= 3 && dist > 120 && (STYLE[f.id]||{range:55}).range > 60 && know(f,'fuse','adv')){   // Fuse: one more hit blows up and slows, get out of her range while the marks fade
+      const a = toCenter(); if (dist < 300) dash(f, a); away(f, a); return true; }
     if ((o.id==='gojo' || o.id==='sukuna') && o.charge>0 && (o.chargeMax||0) >= 0.45 && dist < DOMAIN_R + 30 && know(f,'dom','adv')){   // Void / Shrine winding up: get out of the radius
       if (!dash(f, out)) away(f, out); return true; }
     const fz = zones.find(z => z.kind==='flashfreeze' && z.src && z.src.team!==f.team && inCone(z, f.x, f.y, f.r));   // Flashfire: leave the cone sideways
@@ -3019,8 +3093,13 @@ const MATCH = (() => {
       if (o.id==='jinwoo' && know(f,'aura','basic',4)) r = Math.max(r, 215);
       if ((o.id==='sukuna' || o.id==='gojo') && o.ult>=100 && know(f,'dom2','adv',4)) r = Math.max(r, 300);
       if (o.id==='todoroki' && o.ult>=100 && know(f,'ff3','adv',4)) r = Math.max(r, 340);
+      if (o.id==='todoroki' && o.cd.e<=0 && know(f,'vor','basic',4)) r = Math.max(r, 215);
+      if (o.sdR && know(f,'sus','adv',4)) r = Math.max(r, 360);
+      if (o.id==='naruto' && o.nrR>0 && know(f,'kyu','adv',4)) r = Math.max(r, 380);   // Kurama form: slow melee slam, kite him
       return r===st.range ? st : {range:r, strafe:st.strafe};
     }
+    if (o.sdR && know(f,'sus','adv',4)) return {range: 340, strafe: 60};                                   // melee: do not walk into Susanoo
+    if (o.id==='naruto' && o.nrR>0 && know(f,'kyu','adv',4)) return {range: 260, strafe: 120};            // ... or stand in Kurama's slam
     if (RANK[f.id] && RANK[o.id] && f.id!=='sukuna' && RANK[f.id] + 1 <= RANK[o.id] && know(f,'chip','adv',99)){   // weaker brawler: chip in on a window, then back out
       const t = f.mkT || 0; f.chipPh = f.chipPh || 'bait'; if (f.chipT===undefined) f.chipT = t;
       const el = t - f.chipT;
@@ -3034,21 +3113,29 @@ const MATCH = (() => {
   }
   return {hold, reflex, adjust, know};
 })();
+function stuckOf(o){ return o.stun>0 || o.root>0 || o.slowT>0 || o.knockT>0 || o.dashCd>0.4 || o.tetherT>0; }   // cannot dash out of a delayed hit right now
+function waitedFor(f, key, secs){                     // how long has this skill been ready? (bots wait for a trapped target, but not forever)
+  const t = f.mkT || 0; f.rdy = f.rdy || {};
+  if (f.cd[key] > 0){ f.rdy[key] = null; return false; }
+  if (f.rdy[key] == null) f.rdy[key] = t;
+  return t - f.rdy[key] > secs;
+}
 function diver(o){ return o.id==='sukuna' || o.id==='tanjiro' || o.id==='denji' || o.id==='power' || o.id==='levi' || (o.id==='bakugo' && o.phase==='burst'); }   // melee threat that wants to stick to you
 function pokeDown(o){                              // has the enemy just used their main projectile? (safe to dive)
   if (o.stun>0 || o.root>0 || o.silT>0) return true;
+  if (o.dashCd > 0.9 || (o.id==='zenitsu' && o.zSlowT>0)) return true;       // no Space dash to escape / Zenitsu slowed after his dash
   if (o.id==='gojo') return gojoGuardDown(o);           // bait Blue first, then dive
   if (o.id==='bakugo') return chg(o,'w') <= 1 || o.phase==='retreat';
   if (o.id==='midoriya') return chg(o,'e') === 0;
   if (o.id==='sukuna') return chg(o,'w') === 0;
-  if (o.id==='todoroki') return o.cd.q > 1 || o.cd.w > 1;
+  if (o.id==='todoroki') return (o.cd.q > 1 || o.cd.w > 1) && o.cd.e > 1.5;   // cocoon down = safe to step in
   if (o.id==='denji') return !o.djW && o.cd.w > 3;               // Feral on cooldown = safe to step in
   if (o.id==='power') return chg(o,'e') <= 1 || !!o.pwMend;
   if (o.id==='tanjiro') return o.cd.q > 2 && o.cd.e > 2;
   if (o.id==='levi') return o.cd.r > 2 || o.cd.e > 2;
   if (o.id==='zenitsu') return chg(o,'q') < ZW_COST;
-  if (o.id==='naruto') return o.cd.q > 1 && o.cd.e > 1;
-  if (o.id==='reze') return o.cd.q > 2;
+  if (o.id==='naruto') return (o.cd.q > 1 && o.cd.e > 1) || (!(o.nrW>0) && !(o.nrR>0) && o.cd.w > 8);   // clones just ran out on an 18s cooldown: punish
+  if (o.id==='reze') return o.cd.q > 2 || o.cd.w > 4;                      // her stun ring is down: step in
   if (o.id==='sasuke') return o.cd.w > 3;
   return true;
 }
@@ -5344,10 +5431,11 @@ const NR = (() => {
     if (f.ult >= 100 && dist < 360 && castSkill(f, 'r', ea)) return;            // stays at range and spams every spell as soon as it is ready
     if (f.cd.w <= 0 && dist < 440 && castSkill(f, 'w', ea)) return;
     if (f.cd.q <= 0 && dist < RQ + 30 && castSkill(f, 'q', ea)) return;
-    if (f.cd.e <= 0 && dist < RE + E_R - 10 && castSkill(f, 'e', ea)) return;
+    if (f.cd.e <= 0 && dist < RE + E_R - 10 && (!MATCH.know(f, 'trap', 'adv', 2) || stuckOf(o) || waitedFor(f, 'e', 1.5)) && castSkill(f, 'e', ea)) return;   // toad lands 0.6s later: wait for a target that cannot step out
   }
   function style(f, o){ return f.nrR > 0 ? {range: 50, strafe: 30} : {range: 300, strafe: 100}; }
-  return {clones, q, w, e, r, slam, afterHit, shield, locked, update, depth, ground, top, reset, bot, style, ownsBullet, KS};
+  const hazards = f => toads.filter(o => o.f.team !== f.team && !o.hit && o.t < E_DELAY + 0.05).map(o => ({ref: o, x: o.x, y: o.y, r: E_R + f.r * 0.5 + 10, rating: 2}));   // toad about to drop
+  return {clones, hazards, q, w, e, r, slam, afterHit, shield, locked, update, depth, ground, top, reset, bot, style, ownsBullet, KS};
 })();
 
 JW_T = JW.target;
@@ -5652,13 +5740,15 @@ const SD = (() => {
     if (f.sdR || f.sdQ || f.chan || f.lunge) return;
     if (f.ult >= 100 && dist < R_R - 40 && castSkill(f, 'r', ea)) return;
     if (f.sdWemp > 0) return;
-    if (dist < E_RANGE && f.cd.e <= 0 && (!f.sdE || Math.hypot(o.x - f.sdE.x, o.y - f.sdE.y) > E_R) && castSkill(f, 'e', ea)) return;   // Amaterasu first: burn stacks the longer it stays
-    if (dist < W_RANGE && f.cd.w <= 0 && castSkill(f, 'w', ea)) return;                                                                  // Chidori when he is close: slam, then back off
+    const trap = MATCH.know(f, 'trap', 'adv', 2), stuck = stuckOf(o) || !!(f.sdE && Math.hypot(o.x - f.sdE.x, o.y - f.sdE.y) < E_R);   // lightning / flames only land on someone who cannot dash out
+    if (dist < E_RANGE && f.cd.e <= 0 && (!f.sdE || Math.hypot(o.x - f.sdE.x, o.y - f.sdE.y) > E_R) && (!trap || stuck || waitedFor(f, 'e', 2)) && castSkill(f, 'e', ea)) return;   // Amaterasu first: burn stacks the longer it stays
+    if (dist < W_RANGE && f.cd.w <= 0 && (!trap || stuck || waitedFor(f, 'w', 2.5)) && castSkill(f, 'w', ea)) return;                  // Chidori when his dash is down / he is slowed or stunned
     if (dist < Q_RANGE && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
   }
   function reset(){ balls.length = zones.length = slashes.length = puffs.length = 0; for (const f of [player, enemy]){ f.sdQ = f.sdR = f.sdE = null; f.sdPass = 0; f.sdWemp = 0; } }
   function threat(f){ for (const z of zones) if (z.f.team !== f.team && !z.struck && Math.hypot(f.x - z.x, f.y - z.y) < z.r + f.r * 0.5 + 25) return z; return null; }   // Chidori slam lightning about to land on f
-  return {threat, update, pose, depth, ground, top, hud, aim, icon, bot, style, reset, blink, q, w, e, r, slam, setAA: v => { SD_AA = v; }, rClick, Q_RANGE, W_RANGE, E_RANGE, E_R, R_R};
+  const hazards = f => zones.filter(z => z.f.team !== f.team && !z.struck).map(z => ({ref: z, x: z.x, y: z.y, r: z.r + f.r * 0.5 + 25, rating: 1}));   // Chidori slam lightning about to land
+  return {threat, hazards, update, pose, depth, ground, top, hud, aim, icon, bot, style, reset, blink, q, w, e, r, slam, setAA: v => { SD_AA = v; }, rClick, Q_RANGE, W_RANGE, E_RANGE, E_R, R_R};
 })();
 
 // ---------- DENJI: Bleed (passive), Q Chainsaw Spin, W Feral, E Bloodlust, R Makima's Command ----------
@@ -6345,7 +6435,8 @@ const PW = (() => {
     spears.length = fxs.length = 0;
     for (const f of [player, enemy]){ f.pwMend = null; f.pwDR = 0; f.pwR = null; f.pwRushT = 0; f.pwSlowT = 0; f.pwSlow = 1; }
   }
-  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, taken, dealt, slam, rClick, breakMend, q, w, r, Q_L, Q_HW, E_HOP, E_IMP, E_R};
+  const hazards = f => spears.filter(p => p.f.team !== f.team && !p.done && p.t < R_FALL + 0.05).map(p => ({ref: p, x: p.x, y: p.y, r: R_R + f.r * 0.5 + 12, rating: 1}));   // blood spear about to stab
+  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, hazards, taken, dealt, slam, rClick, breakMend, q, w, r, Q_L, Q_HW, E_HOP, E_IMP, E_R};
 })();
 
 // ---------- LEVI: Shinzou wo Sasageyo (passive), Q ODM, W Reverse-Blade Slash, E Silencing Strike, R Aim for the Neck ----------
