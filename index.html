@@ -1486,6 +1486,7 @@ function drawObstacles(only){                      // classic look (and Todoroki
 }
 const PURPLE_BOOM = 10, BLUE_STUN = 0.8;         // Blue: outer ring slows, core stuns once                          // Red + Blue collision damage
 const INF_R = 130, timers = [], DOMAIN_R = 230;   // both domain ults share one size
+const EMP_BONUS = 3;   // Bakugo empowered auto
 const MELEE_R = 45, MELEE_CD = 1.5, AUTO_DMG = 3.4, AUTO_HALF = 75*Math.PI/180;   // auto: 150 degree cone, short reach
 const MIDO_AUTO = 3.0, MIDO_CHAIN = 0.5;          // Midoriya: 2 autos per reset, 2nd within 0.5s
 // ---------- TODOROKI: half fire, half ice ----------
@@ -1914,7 +1915,7 @@ function melee(f){                               // basic attack: short-range sw
     let kb = emp ? 400 : f.id==='midoriya' ? (mg ? 360 : 260) : 150;   // Bakugo's boosted auto: big knockback
     if (second && f.aaHit1) kb = mg ? 600 : 440;                 // Midoriya: landing both autos knocks them back
     if (cleave) kb = 250;
-    let ad = (f.id==='midoriya' ? MIDO_AUTO : AUTO_DMG) + (cleave ? CLEAVE_BONUS : 0);
+    let ad = (f.id==='midoriya' ? MIDO_AUTO : AUTO_DMG) + (cleave ? CLEAVE_BONUS : 0) + (emp ? EMP_BONUS : 0);
     if (f.id==='tanjiro') ad *= 0.9;                  // Tanjiro autos: -10%
     const thr = f.id==='tanjiro' && f.threadReady;    // Tanjiro: Opening Thread auto
     if (thr){ ad *= THREAD_MULT; f.threadReady = false; }
@@ -2022,15 +2023,15 @@ function wallHit(f, a, len, dmg){                  // a ray from a trapped fight
 }
 // ---------- ZENITSU NUMBERS ----------
 const ZEN_PARA = 0.2;                                                     // passive: every hit paralyzes 0.2s (doesn't add on top of a longer stun)
-const ZQ_MIN = 140, ZQ_MAX = 300, ZQ_SPD = 1400, ZQ_DMG0 = 2, ZQ_DMG1 = 5, ZQ_CD = 1.7, ZQ_CD_SLEEP = 1.2, ZQ_MAXCH = 5;   // Thunderclap: 5 charges, one back every ZQ_CD s (ZQ_CD_SLEEP asleep); W costs 2, E costs 3   // Thunderclap: hold 0-1s -> 200-420px, 4-9 dmg
-const ZW_MULT = 3, ZW_STUN = 1, ZW_DMG = 28, ZW_LEN = 420, ZW_COST = 2, ZE_COST = 3;                                          // Godspeed Q: triple dmg, 1.5s stun, 2 charges
-const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 7, ZE_STUN = 0.5, ZE_LOCK = 2;   // Sixfold triangle
+const ZQ_MIN = 140, ZQ_MAX = 300, ZQ_SPD = 1400, ZQ_DMG0 = 2, ZQ_DMG1 = 5, ZQ_CD = 2.1, ZQ_CD_SLEEP = 1.5, ZQ_MAXCH = 5;   // Thunderclap: 5 charges, one back every ZQ_CD s (ZQ_CD_SLEEP asleep); W costs 2, E costs 3   // Thunderclap: hold 0-1s -> 200-420px, 4-9 dmg
+const ZW_MULT = 3, ZW_STUN = 1, ZW_DMG = 9, ZW_LEN = 420, ZW_COST = 2, ZE_COST = 3;                                          // Godspeed Q: triple dmg, 1.5s stun, 2 charges
+const ZE_T = 0.6, ZE_WIN = 2, ZE_LEN = 240, ZE_HALF = 30*Math.PI/180, ZE_W = 22, ZE_EDGE = 3.5, ZE_STUN = 0.5, ZE_LOCK = 2;   // Sixfold triangle
 const ZR_LEN = 600, ZR_SPD = 1800, ZR_DMG = 20, ZR_STUN = 0.6, ZR_PAST = 150;   // ult stops 150px past the first enemy hit (so E can follow)             // Flaming Thunder God
 // ---------- TANJIRO NUMBERS ----------
 const KU_T = 1.0, THREAD_T = 3, THREAD_MULT = 1.5, THREAD_STUN = 0.3;          // knock-up length; Opening Thread
-const WW_FLIP = 110, WW_FLIP_T = 0.3, WW_R = 75, WW_HALF = 60*Math.PI/180, WW_DMG = 5.5;   // Waterwheel
+const WW_FLIP = 110, WW_FLIP_T = 0.3, WW_R = 75, WW_HALF = 60*Math.PI/180, WW_DMG = 8;   // Waterwheel
 const WP_T = 2, WP_DMG = 2.5, WP_BLOCK = 0.4, WP_SPD = 1.5;                    // Whirlpool
-const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 6, FLUX_LOCK = 320;   // Constant Flux
+const FLUX_DASH = 150, FLUX_T = 0.15, FLUX_R = 60, FLUX_DMG = 9, FLUX_LOCK = 320;   // Constant Flux
 const HINO_WIN = 3, HINO_DMG = 1.2, HINO_KU_CD = 4, HINO_SPD = 1.15;          // Hinokami Kagura
 const SKILLS = {
   gojo: {
@@ -2101,19 +2102,19 @@ const SKILLS = {
   bakugo: {
     amp: 1 + 0.4*Math.min(1, 3/4),                  // AP Shot vulnerable: 3s per 4s charge = 75% uptime
     // Q: short 90 degree cone; stuns enemies that are facing him for 1s
-    q:{name:'Stun Grenade', cd:12, est:5, chan:0, cast(f,a){   // instant
+    q:{name:'Stun Grenade', cd:12, est:8, chan:0, cast(f,a){   // instant
       if (SPR3D[f.id]) FX3.grenade(f, a); else arcs.push({x:f.x, y:f.y, off:f.r, a, r:130, t:0.25, h:Math.PI/4, c:'#fff6b0'});
       const tg = foe(f), d = Math.hypot(tg.x-f.x, tg.y-f.y);
       let da = Math.abs(Math.atan2(tg.y-f.y, tg.x-f.x) - a); if (da > Math.PI) da = 2*Math.PI - da;
       if (tg.hp>0 && d < 130+tg.r && da < Math.PI/4){
-        hit(tg, 5, f);
+        hit(tg, 8, f);
         let fa = Math.abs(tg.aim - Math.atan2(f.y-tg.y, f.x-tg.x)); if (fa > Math.PI) fa = 2*Math.PI - fa;
         if (fa < Math.PI/3) tg.stun = Math.max(tg.stun, 1.5);    // only if they were looking at him: 1.5s
       }
     }},
     // W: AP Shot, 3 charges. Line bullet: small dmg, slow, +40% dmg taken for 3s. 2 shots break a shrine segment
-    w:{name:'AP Shot', cd:4, est:2.5, charges:3, chan:0, cast(f,a){   // instant
-      proj(f, a, {spd:820, r:6, dmg:2.5, life:0.6, line:true, wall:1.5, color:'#ffe066',
+    w:{name:'AP Shot', cd:4, est:4.5, charges:3, chan:0, cast(f,a){   // instant
+      proj(f, a, {spd:820, r:6, dmg:4.5, life:0.6, line:true, wall:1.5, color:'#ffe066',
         onHit:tg => { tg.slowT = Math.max(tg.slowT, 1); tg.vulnT = 3; }});
     }},
     // E: Blast dash, 3 charges. Short dash, then his auto attack is ready immediately
@@ -2213,7 +2214,7 @@ const SKILLS = {
     // W: Reverse-Blade Slash: circle slash around him, then +40% attack speed for 5s
     w:{name:'Tempest Slash', hud:'W', cd:12, est:7, chan:0, cast(f,a){ LV.w(f); }},
     // E: Silencing Strike: dash and slash (no teleport): damage + 1s silence
-    e:{name:'Silencing Strike', hud:'E', cd:9, est:7, chan:0, cast(f,a){ LV.e(f, a); }},
+    e:{name:'Silencing Strike', hud:'E', cd:12, est:7, chan:0, cast(f,a){ LV.e(f, a); }},
     // R: Aim for the Neck: long tether to the enemy or a wall, pulled in at 180% move speed, untouchable but stunnable, slash, then kick = knockback + 1s stun. Costs 1 ODM charge, no ult meter
     r:{name:'Deadly Execute', hud:'R', cd:5, est:6, chan:0, cast(f,a){ LV.r(f, a); }}
   },
@@ -2223,8 +2224,8 @@ const SKILLS = {
     q:{name:'Blood Spikes', hud:'Spikes', cd:7, est:8, chan:0.25, cast(f,a){ PW.q(f, a); }},
     // W: Blood Mend: heal over 5s, broken by using anything or getting hit
     w:{name:'Blood Mend', hud:'Mend', cd:14, est:0, chan:0, cast(f,a){ PW.w(f); }},
-    // E: Blood Hammer: 3 charges (5s each), flip-hop then slam, knock up 0.8s, 30% less damage taken for 1.5s after a slam
-    e:{name:'Blood Hammer', hud:'Hammer', cd:5, est:7, charges:3, chan:0, cast(f,a){ PW.slam(f, a); }},
+    // E: Blood Hammer: 3 charges (8s each), flip-hop then slam, knock up 0.8s, 30% less damage taken for 1.5s after a slam
+    e:{name:'Blood Hammer', hud:'Hammer', cd:8, est:7, charges:3, chan:0, cast(f,a){ PW.slam(f, a); }},
     // R: Thousand Terrors: 10 blood spears, left click drops one at the cursor (stabs down after 0.7s), right click moves
     r:{name:'Thousand Terrors', hud:'Blood Rain', chan:0.6, cast(f,a){ PW.r(f); }}
   },
@@ -2877,6 +2878,8 @@ function botDash(f, ea, dist){                     // dodge projectiles, Red and
         const side = (Math.cos(la+Math.PI/2)*ox + Math.sin(la+Math.PI/2)*oy) >= 0 ? 1 : -1;
         dodge = la + side*Math.PI/2; big = true; break; } }
   }
+  if (dodge===null && typeof SD!=='undefined'){ const kz = SD.threat(f);        // Sasuke W: the lightning drops on this spot in 0.7s: dash out of it
+    if (kz && !kz.seen){ kz.seen = true; if (Math.random() < 0.92*botDiff(f).dodge){ dodge = Math.atan2(f.y-kz.y, f.x-kz.x); big = true; } } }
   if (dodge===null) for (const z of zones){         // Todoroki's auto cone sweeping toward me: sidestep it like a bolt
     if (z.kind!=='todocone' || z.src===f || z.seen || z.done) continue;
     const d = Math.hypot(f.x-z.x, f.y-z.y);
@@ -5048,8 +5051,8 @@ function smashCrack(x, y, R){
 // ---------- NARUTO: passive Kurama's Chakra (below 15% once per match: speed + heal to 30%). Q Rasenshuriken | W Shadow Clone Jutsu | E Summoning Jutsu | R Kurama Mode (giant fox form) ----------
 const NR = (() => {
   const RQ = 300, RE = 185, CL_R = 170, W_T = 2, Q_SPD = 230, Q_R = 60, Q_DMG = 10, E_DMG = 9, E_R = 95, E_DELAY = 0.6, SLOW_T = 2.5;
-  const R_T = 8, SH_MAX = 50, R_CONTACT = 3, R_TICK = 0.5, R_REACH = 28, SLAM_R = 70, SLAM_DMG = 8, SLAM_HEAL = 4, KS = 0.8, DASH_BOOST = 0.43;
-  const TOAD_SP = 0.6, GAIT_DASH = 2.1, GAIT_WALK = 0.7;
+  const R_T = 8, SH_MAX = 60, R_CONTACT = 3, R_TICK = 0.5, R_REACH = 28, SLAM_R = 70, SLAM_DMG = 8, SLAM_HEAL = 4, KS = 0.8, DASH_BOOST = 0.43;
+  const TOAD_SP = 0.6, GAIT_DASH = 2.52, GAIT_WALK = 0.84, E_CORE = 45;   // wolf gait +20% speed; toad core stuns
   const PASS_AT = 0.15, PASS_HEAL = 0.30, PASS_SPD = 1.3, PASS_T = 5;
   const has = typeof document !== 'undefined' && !!document.createElement;
   const FXI = {}; if (has && typeof NR_FXD !== 'undefined') for (const k in NR_FXD){ const d = NR_FXD[k], im = new Image(); im.src = d.src; FXI[k] = Object.assign({img: im}, d); }
@@ -5160,7 +5163,9 @@ const NR = (() => {
       const o = toads[i]; o.t += dt;
       if (!o.hit && o.t >= E_DELAY){
         o.hit = true; smashCrack(o.x, o.y, 55); damageArea(o.x, o.y, E_R, 8);
-        const tg = foe(o.f); if (tg && tg.hp > 0 && Math.hypot(tg.x - o.x, tg.y - o.y) < E_R + tg.r){ hit(tg, E_DMG, o.f, 0, 0); tg.slowT = Math.max(tg.slowT || 0, SLOW_T); }
+        const tg = foe(o.f); if (tg && tg.hp > 0 && Math.hypot(tg.x - o.x, tg.y - o.y) < E_R + tg.r){ hit(tg, E_DMG, o.f, 0, 0);
+          if (Math.hypot(tg.x - o.x, tg.y - o.y) < E_CORE + tg.r * 0.5){ tg.stun = Math.max(tg.stun, 1); fx.push({x: tg.x, y: tg.y - tg.r - 16, t: 0.7, txt: 'CRUSHED'}); }   // dead centre: 1s stun
+          else tg.slowT = Math.max(tg.slowT || 0, SLOW_T); }                                                                                       // outer area: slow
       }
       if (o.t > 2.4) toads.splice(i, 1);
     }
@@ -5247,12 +5252,12 @@ const NR = (() => {
   function reset(){ SMASH_MARKS.length = 0; clones.length = 0; fxs.length = 0; toads.length = 0; bursts.length = 0; for (const f of [player, enemy]){ f.nrR = f.nrSh = f.nrW = f.nrSpdT = 0; f.nrP = false; } }
   function bot(f, o, dist, ea){
     if (f.nrR > 0) return;
-    if (f.ult >= 100 && dist < 320 && castSkill(f, 'r', ea)) return;
-    if (f.cd.w <= 0 && dist < 260 && castSkill(f, 'w', ea)) return;
-    if (dist < RE - 40 && castSkill(f, 'e', ea)) return;
-    if (dist < RQ - 20 && castSkill(f, 'q', ea)) return;
+    if (f.ult >= 100 && dist < 360 && castSkill(f, 'r', ea)) return;            // stays at range and spams every spell as soon as it is ready
+    if (f.cd.w <= 0 && dist < 440 && castSkill(f, 'w', ea)) return;
+    if (f.cd.q <= 0 && dist < RQ + 30 && castSkill(f, 'q', ea)) return;
+    if (f.cd.e <= 0 && dist < RE + E_R - 10 && castSkill(f, 'e', ea)) return;
   }
-  function style(f, o){ return f.nrR > 0 ? {range: 50, strafe: 30} : {range: 220, strafe: 90}; }
+  function style(f, o){ return f.nrR > 0 ? {range: 50, strafe: 30} : {range: 300, strafe: 100}; }
   return {clones, q, w, e, r, slam, afterHit, shield, locked, update, depth, ground, top, reset, bot, style, ownsBullet, KS};
 })();
 
@@ -5563,7 +5568,8 @@ const SD = (() => {
     if (dist < Q_RANGE && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
   }
   function reset(){ balls.length = zones.length = slashes.length = puffs.length = 0; for (const f of [player, enemy]){ f.sdQ = f.sdR = f.sdE = null; f.sdPass = 0; f.sdWemp = 0; } }
-  return {update, pose, depth, ground, top, hud, aim, icon, bot, style, reset, blink, q, w, e, r, slam, setAA: v => { SD_AA = v; }, rClick, Q_RANGE, W_RANGE, E_RANGE, E_R, R_R};
+  function threat(f){ for (const z of zones) if (z.f.team !== f.team && !z.struck && Math.hypot(f.x - z.x, f.y - z.y) < z.r + f.r * 0.5 + 25) return z; return null; }   // Chidori slam lightning about to land on f
+  return {threat, update, pose, depth, ground, top, hud, aim, icon, bot, style, reset, blink, q, w, e, r, slam, setAA: v => { SD_AA = v; }, rClick, Q_RANGE, W_RANGE, E_RANGE, E_R, R_R};
 })();
 
 // ---------- DENJI: Bleed (passive), Q Chainsaw Spin, W Feral, E Bloodlust, R Makima's Command ----------
@@ -6320,29 +6326,30 @@ const LV = (() => {
   // ---------------- W ----------------
   function w(f){
     f.aaW = null;                                                // he can keep moving during W
+    const tether = !!(f.lvQ || f.lvR);                           // on a tether W fires the passive slash on anything close (the tether is never touched)
     fxs.push({k: 'ring', x: f.x, y: f.y, f, t: 0, dur: 0.55});
+    if (tether) fxs.push({k: 'spin', x: f.x, y: f.y, f, t: 0, dur: 0.45});
     timers.push({t: W_HIT, fn(){
       if (f.hp <= 0) return;
       const tg = live(foe(f));
       if (tg && tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < W_R + tg.r){
-        const a = Math.atan2(tg.y - f.y, tg.x - f.x); hit(tg, W_DMG, f, Math.cos(a) * 200, Math.sin(a) * 200);
+        const a = Math.atan2(tg.y - f.y, tg.x - f.x);
+        if (tether){ hit(tg, SPIN_DMG, f, 0, 0); say(f, 0.9, 'SHINZOU WO SASAGEYO'); }
+        else hit(tg, W_DMG, f, Math.cos(a) * 200, Math.sin(a) * 200);
       }
     }});
     f.lvAS = W_T; say(f, 0.8, 'ATK SPD +40%');
-    if (!f.lvQ && !f.lvR) play3(f, 'w_slash', f.aim, {dur: 0.5});   // on a tether he just keeps spinning
+    if (!tether) play3(f, 'w_slash', f.aim, {dur: 0.5});
   }
-  // ---------------- E ----------------
-  function eEnd(f, a){
-    const tg = live(foe(f));
-    if (f.hp > 0 && tg && tg.hp > 0){
-      const d = Math.hypot(tg.x - f.x, tg.y - f.y); let da = Math.abs(Math.atan2(tg.y - f.y, tg.x - f.x) - a); if (da > Math.PI) da = 2 * Math.PI - da;
-      if (d < f.r + tg.r + E_REACH && da < 1.75){
-        hit(tg, E_DMG, f, Math.cos(a) * 220, Math.sin(a) * 220);
-        if (tg.hp > 0){ tg.silT = Math.max(tg.silT || 0, E_SIL); say(tg, 0.9, 'SILENCED'); }
-      }
-    }
+  function eEnd(f, a){                                           // dash finished: slash what is in reach, damage + silence
+    if (f.hp <= 0) return;
     fxs.push({k: 'cut', x: f.x, y: f.y, a, t: 0, dur: 0.3});
-    f.root = Math.max(f.root, 0.12);
+    const tg = live(foe(f));
+    if (tg && tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < f.r + tg.r + E_REACH){
+      const b = Math.atan2(tg.y - f.y, tg.x - f.x);
+      hit(tg, E_DMG, f, Math.cos(b) * 120, Math.sin(b) * 120);
+      tg.silT = Math.max(tg.silT || 0, E_SIL);
+    }
   }
   function e(f, a){
     if (f.hp <= 0 || f.stun > 0 || f.chan || f.lunge || f.fly) return false;
@@ -7581,8 +7588,8 @@ const INFO = {
     p: ["KURAMA'S CHAKRA", "Once per match, a blow that would nearly finish him wakes the fox inside. He is healed back from the brink and surges forward with new speed.", "The Nine-Tails sleeps within the boy the village feared."],
     q: ["Hurl a slow, wide ball of whirling wind that tears apart where it lands. Bursts in a blast of cutting wind.", "Wind Release: Rasenshuriken. A sphere of chakra spun into a thousand blades."],
     w: ["Shadow clones rise at his sides and copy his Q and E from their own positions. They vanish at the first hit.", "Shadow Clone Jutsu. The forbidden technique that made one boy an army."],
-    e: ["Summon a toad that drops from the sky on the marked spot, crushing and slowing everything beneath it.", "Summoning Jutsu. A giant ally answers the call, grumbling all the way down."],
-    r: ["Become the giant fox. A shield wraps him, everything he touches takes damage, and crates are crushed. His basic attack slams the ground and heals him. Q, W and E are locked, and dashing is quicker.", "Kurama, the Nine-Tailed Fox. Power enough to level mountains, borrowed and never owned."]
+    e: ["Summon a toad that drops from the sky on the marked spot, crushing everything beneath it: the centre stuns for 1 second, the outer area slows.", "Summoning Jutsu. A giant ally answers the call, grumbling all the way down."],
+    r: ["Become the giant fox. A bigger shield wraps him, everything he touches takes damage, and crates are crushed. His basic attack slams the ground and heals him. Q, W and E are locked, and dashing is quicker.", "Kurama, the Nine-Tailed Fox. Power enough to level mountains, borrowed and never owned."]
   },
   jinwoo: {
     p: ["MONARCH'S DOMAIN", "Drain shadow energy from all who dare enter his domain. Soldiers rise from the dark to serve him, and the fallen may rise again.", "Once the weakest hunter, now the ruler of shadows."],
@@ -7615,7 +7622,7 @@ const INFO = {
   levi: {
     p: ["SHINZOU WO SASAGEYO", "Whenever Levi touches an enemy while flying on his ODM gear, he spins straight through them for deadly damage. ODM gear holds 5 charges and gains one every 3 seconds.", "Humanity's strongest soldier. Dedicate your heart."],
     q: ["Shoot a tether at the first wall or prop toward your cursor and whirl around it in a circle as wide as the tether. Pass an enemy and he spins through them, hitting without stopping. Press Q again, or get blocked by a wall, to roll out. Costs 1 ODM charge.", "One flick of the wrist and the whole arena is a swing set."],
-    w: ["Spin in a full circle with reverse-grip blades, slashing everything around him, then gain 40% attack speed for 5 seconds. He can move while casting it, and it never breaks a tether.", "Reverse grip. Closer, faster, meaner."],
+    w: ["Spin in a full circle with reverse-grip blades, slashing everything around him, then gain 40% attack speed for 5 seconds. He can move while casting it. While on a tether it fires the passive slash on enemies close to him and never breaks the tether.", "Reverse grip. Closer, faster, meaner."],
     e: ["A real dash and slash, not a teleport. The cut silences the enemy for 1 second: no abilities, and the edges of their screen go grey.", "Not a word. Not a spell. Not a chance."],
     r: ["Fire a tether at the enemy or a wall at medium range and get pulled in, much faster than walking. Nothing can hurt him on the way but a stun can stop him. Any ability except W interrupts it, R again lets go and rolls. At the end he slashes the enemy, then kicks them back and stuns them for 1 second. Costs 1 ODM charge, not the ultimate meter.", "Aim for the neck."]
   },
