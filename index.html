@@ -7325,7 +7325,7 @@ function runDemo(dt){                               // plays the combo on the du
 let ultRefillAt = 0, training = false, trainIdx = 0, botsBeforeTrain = true, trainLog = [], trainTotal = 0, dummyLastHit = 0;
 let lastMatch = ['gojo', 'sukuna'];
 const PICK = ['gojo', 'sukuna', 'bakugo', 'midoriya', 'todoroki', 'tanjiro', 'zenitsu', 'jinwoo', 'naruto', 'sasuke', 'denji', 'reze', 'power', 'levi'];   // 1 Gojo  2 Sukuna  3 Bakugo  4 Midoriya  5 Todoroki  6 Tanjiro
-const NET_DEFAULT_RELAY = '';   // optional: put your relay address here (wss://...) so players don't have to type it
+const NET_DEFAULT_RELAY = 'wss://anime-arena-relay.animearena.workers.dev';   // optional: put your relay address here (wss://...) so players don't have to type it
 // ---------- ONLINE MULTIPLAYER: room codes over a relay + lockstep (everyone simulates the same match, only inputs travel) ----------
 const NET = {on:false, host:false, ws:null, id:-1, me:0, mode:'ffa', players:[], F:0, D:6, sentTo:0, inbox:{}, prevIn:[], botFrom:[], lastIn:[], hist:{}, syncs:[], acc:0, stallMs:0, rng:null, code:'', cfg:null, desync:0, roster:[], status:'', relay:'', mb:{}, inGame:false, hostId:0};
 const _rand = Math.random, _pnow = performance.now.bind(performance);
