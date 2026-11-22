@@ -434,7 +434,7 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => keys[e.code] = false);
 // attack / move-to-click can sit on any mouse button or key (SETTINGS): KB.aa = auto attack (hold shows range, release swings), KB.mv = move to the cursor
-const uiUp_ = () => typeof MENU !== 'undefined' && MENU.open;
+const uiUp_ = () => (typeof MENU !== 'undefined' && MENU.open) || (typeof NET !== 'undefined' && NET.on);
 addEventListener('keydown', e => { if (e.repeat || ended || uiUp_() || (e.target && e.target.tagName === 'INPUT')) return; if (e.code === KB.mv){ demo = null; actMove(); } else if (e.code === KB.aa){ demo = null; actAtk(true); } });
 addEventListener('keyup', e => { if (e.code === KB.aa) actAtk(false); });
 addEventListener('mouseup', e => { if (e.button > 2) e.preventDefault(); }); addEventListener('auxclick', e => { if (e.button > 2) e.preventDefault(); });
@@ -443,9 +443,10 @@ cv.addEventListener('mousemove', e => { const r = cv.getBoundingClientRect(); if
 let moveTarget = null, admin = false, bots = true, ended = false, endT = 0;
 const wins = {}, REPLAY = {x:SW/2-90, y:SH/2+30, w:180, h:44};
 cv.addEventListener('mousedown', e => {
+  if (NET.on && !ended) return;
   if (ended){                                        // match over: only the REPLAY button works
     const mp_ = mousePos(e), mx = mp_.x, my = mp_.y;
-    if (e.button===0 && mx>=REPLAY.x && mx<=REPLAY.x+REPLAY.w && my>=REPLAY.y && my<=REPLAY.y+REPLAY.h) startMatch(matchP, matchE);
+    if (e.button===0 && mx>=REPLAY.x && mx<=REPLAY.x+REPLAY.w && my>=REPLAY.y && my<=REPLAY.y+REPLAY.h) (NET.on ? netReplay() : startMatch(matchP, matchE));
     return;
   }
   if (training && e.button===0){                     // tester: click a combo to watch it
@@ -489,6 +490,21 @@ function makeFighter(id, x, y, team){
 }
 const player = makeFighter('gojo', 200, H/2, 'p');
 const enemy  = makeFighter('sukuna', W-200, H/2, 'e');
+// ---------- MULTIPLAYER CORE: every fighter in the match; player = fighters[0], enemy = fighters[1] (1v1 unchanged) ----------
+const fighters = [player, enemy];
+const isFoe = (a, b) => a !== b && a.team !== b.team;
+const foesOf = f => fighters.filter(u => isFoe(f, u));
+const liveFoes = f => fighters.filter(u => isFoe(f, u) && u.hp > 0);
+const MP = {mode:'1v1', feed:[]};
+const realFoe = f => nearestFoe(f) || foesOf(f)[0] || (f === player ? enemy : player);
+const retarget = (f, t) => JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t;
+const bulletFoe = b => { let best = null, any = null, bd = 1e9; for (const u of fighters){ if (u.team === b.team) continue; any = any || u; if (u.hp <= 0) continue; const d = Math.hypot(b.x-u.x, b.y-u.y); if (d < bd){ bd = d; best = u; } } return best || any; };
+const zoneFoe = z => { let best = null, bd = 1e9; for (const u of fighters){ if (!isFoe(z.src, u) || u.hp <= 0) continue; const d = Math.hypot(u.x-z.x, u.y-z.y); if (d < bd){ bd = d; best = u; } } return retarget(z.src, best || realFoe(z.src)); };
+const TEAMCOL = {p:'#3da5ff', e:'#ff4040', f2:'#47e05a', f3:'#ffd93d'};
+const teamCol = f => TEAMCOL[f.team] || '#ffffff';
+const aliveTeams = () => new Set(fighters.filter(f => f.hp > 0).map(f => f.team)).size;
+const iWon = () => fighters.some(f => f.hp > 0 && f.team === meF().team) && !fighters.some(f => f.hp > 0 && f.team !== meF().team);
+const nearestFoe = f => { let best = null, bd = 1e9; for (const u of fighters){ if (!isFoe(f, u) || u.hp <= 0) continue; const d = Math.hypot(u.x - f.x, u.y - f.y); if (d < bd){ bd = d; best = u; } } return best; };
 const bullets = [], fx = [], zones = [], beams = [], arcs = [];
 // ---------- TERRAIN ----------
 // unbreakable: stone (gray). breakable: crates / barrels (brown) with HP. Point-symmetric layout so both sides are fair
@@ -867,7 +883,7 @@ function bldBehind(o, x, y, up){                  // is this point hidden BEHIND
   return nx*(-TILT*YAW) + ny*(-1) >= 0;              // nearest wall faces away from the camera -> it's behind
 }
 function drawDepthPass(){
-  if (!mapBG()){ const l3 = [{y:enemy.y, f:enemy}, {y:player.y, f:player}]; FX3.depth(it => l3.push(it)); MD.depth(it => l3.push(it)); TD.depth(it => l3.push(it)); TJ3.depth(it => l3.push(it)); ZN.depth(it => l3.push(it)); JW.depth(it => l3.push(it)); SD.depth(it => l3.push(it)); DJ.depth(it => l3.push(it)); RZ.depth(it => l3.push(it)); PW.depth(it => l3.push(it)); LV.depth(it => l3.push(it)); NR.depth(it => l3.push(it)); l3.sort((a, b) => a.y - b.y).forEach(it => it.f ? drawFighter(it.f) : it.fn()); return; }      // classic: flat
+  if (!mapBG()){ const l3 = fighters.map(f_ => ({y:f_.y, f:f_})); FX3.depth(it => l3.push(it)); MD.depth(it => l3.push(it)); TD.depth(it => l3.push(it)); TJ3.depth(it => l3.push(it)); ZN.depth(it => l3.push(it)); JW.depth(it => l3.push(it)); SD.depth(it => l3.push(it)); DJ.depth(it => l3.push(it)); RZ.depth(it => l3.push(it)); PW.depth(it => l3.push(it)); LV.depth(it => l3.push(it)); NR.depth(it => l3.push(it)); l3.sort((a, b) => a.y - b.y).forEach(it => it.f ? drawFighter(it.f) : it.fn()); return; }      // classic: flat
   const blds = OBST.filter(o => o.kind==='building'), back = [], front = [];
   const add = (it, x, y, up) => (blds.some(b => bldBehind(b, x, y, up)) ? back : front).push(it);
   for (const o of OBST){ if (o.kind==='treewall'){ for (const t of wallTrees(o)) front.push({y:t.y, fn:() => wallTreeDraw(t)}); continue; }
@@ -875,7 +891,7 @@ function drawDepthPass(){
     const it = {y: o.type==='poly' ? (o.back ? -1e9 : 1e9) : o.type==='circle' ? o.y : o.y + o.h/2, o};
     if (o.type==='poly') (o.back ? back : front).push(it); else add(it, o.x, o.y, BILL[o.kind] ? 40 : 10); }
   for (const d of DECOR[MAP] || []) back.push({y: d.y, d});
-  for (const f of [enemy, player]) add({y: f.y, f}, f.x, f.y, f.r*1.4);
+  for (const f of fighters) add({y: f.y, f}, f.x, f.y, f.r*1.4);
   FX3.depth(it => front.push(it)); MD.depth(it => front.push(it)); TD.depth(it => front.push(it)); TJ3.depth(it => front.push(it)); ZN.depth(it => front.push(it)); JW.depth(it => front.push(it)); SD.depth(it => front.push(it)); DJ.depth(it => front.push(it)); RZ.depth(it => front.push(it)); PW.depth(it => front.push(it)); LV.depth(it => front.push(it)); NR.depth(it => front.push(it));
   const draw1 = it => { if (it.fn) it.fn(); else if (it.f) drawFighter(it.f); else if (it.d) drawDecor(it.d); else drawObst3D(it.o); };
   back.sort((a, b) => a.y - b.y).forEach(draw1);                         // things hidden behind buildings
@@ -884,7 +900,7 @@ function drawDepthPass(){
 }
 function behindIt(o, top, ww){                     // is a fighter hidden behind this object?
   const base = o.type==='circle' ? o.y : o.y + o.h/2;
-  return [player, enemy].some(f => f.hp>0 && f.y < base && f.y > top - f.r*2 && Math.abs(f.x - o.x) < ww/2 + f.r);
+  return fighters.some(f => f.hp>0 && f.y < base && f.y > top - f.r*2 && Math.abs(f.x - o.x) < ww/2 + f.r);
 }
 const YAW = 0.38;                                   // camera turned ~10 degrees: tops shift left, so the right-hand sides show
 function shade(hex, k){ const n = parseInt(hex.slice(1, 7), 16), f = c => Math.max(0, Math.min(255, Math.round(c*k))); return 'rgb(' + f(n>>16) + ',' + f((n>>8)&255) + ',' + f(n&255) + ')'; }
@@ -986,7 +1002,7 @@ function drawBuilding(o){                          // a block = several towers, 
   const hull = t => { const lift = t.h*HF, ox = -lift*TILT*YAW; return t.pts.concat(t.pts.map(([x, y]) => [x + ox, y - lift])); };
   const covers = (t, x, y) => { const pts = hull(t), base = t.pts, roof = roofOf(t); if (polyInside(roof, x, y)) return true;   // over the roof or any wall
     for (let i=0; i<base.length; i++){ const a = base[i], b = base[(i+1)%base.length]; if (polyInside([a, b, roof[(i+1)%base.length], roof[i]], x, y) || polyInside([a, roof[i], roof[(i+1)%base.length], b], x, y)) return true; } return false; };
-  const fade = [player, enemy].some(f => f.hp>0 && bldBehind(o, f.x, f.y, f.r*1.4)) ? 0.3 : 1;   // a fighter hidden behind it: see-through
+  const fade = fighters.some(f => f.hp>0 && bldBehind(o, f.x, f.y, f.r*1.4)) ? 0.3 : 1;   // a fighter hidden behind it: see-through
   ctx.save(); ctx.globalAlpha = fade;
   for (const t of towers) drawTower(t, fade);
   ctx.restore();
@@ -1079,7 +1095,7 @@ function drawProp3D(o){                              // 3D-rendered scenery: 1 s
   ctx.translate(o.x + 6, oy + 2); ctx.scale(1, 0.62); const g = ctx.createRadialGradient(0, 0, shR*0.1, 0, 0, shR);
   g.addColorStop(0, 'rgba(0,0,0,.34)'); g.addColorStop(0.6, 'rgba(0,0,0,.18)'); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, shR, 0, 7); ctx.fill();
   ctx.setTransform(ctx.getTransform()); ctx.restore(); ctx.save();
-  const behind = tree && [player, enemy].some(f => f.hp>0 && ((f.y < oy - 2 && f.y > y0 - f.r && Math.abs(f.x - o.x) < dw/2 + f.r) || (o.canopy && Math.hypot(f.x - o.x, f.y - o.y) < o.canopy)));
+  const behind = tree && fighters.some(f => f.hp>0 && ((f.y < oy - 2 && f.y > y0 - f.r && Math.abs(f.x - o.x) < dw/2 + f.r) || (o.canopy && Math.hypot(f.x - o.x, f.y - o.y) < o.canopy)));
   ctx.globalAlpha = behind ? 0.4 : 1; ctx.imageSmoothingEnabled = false; ctx.drawImage(p.im, x0, y0, dw, dh);
   ctx.restore(); return true;
 }
@@ -1192,7 +1208,7 @@ function drawBillboard(o){
   ctx.globalAlpha = 1; if (o.kind==='bigtree') drawRoots(o);
   if (o.kind==='lamp'){ ctx.globalAlpha = 0.18; ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.ellipse(o.x, o.y + 4, 60, 60, 0, 0, 7); ctx.fill(); }   // light pool
   if (o.kind==='tlight'){ ctx.globalAlpha = 0.5; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(o.x + 2, o.y + 2, o.r + 4, o.r + 4, 0, 0, 7); ctx.fill(); ctx.globalAlpha = 1; ctx.strokeStyle = '#c4c8cd'; ctx.lineWidth = 2; ctx.stroke(); }   // where it stands
-  const behind = tree && [player, enemy].some(f => f.hp>0 && ((f.y < baseY - 2 && f.y > y0 - f.r && Math.abs(f.x - o.x) < dw/2 + f.r) || (o.canopy && Math.hypot(f.x - o.x, f.y - o.y) < o.canopy)));   // behind it, or under the canopy
+  const behind = tree && fighters.some(f => f.hp>0 && ((f.y < baseY - 2 && f.y > y0 - f.r && Math.abs(f.x - o.x) < dw/2 + f.r) || (o.canopy && Math.hypot(f.x - o.x, f.y - o.y) < o.canopy)));   // behind it, or under the canopy
   ctx.globalAlpha = behind ? 0.38 : 1; ctx.imageSmoothingEnabled = false;
   ctx.drawImage(sp.c, x0, y0, dw, dh);
   if (o.kind==='tlight'){ const red = Math.floor(performance.now()/4000 + (o.x > W/2 ? 1 : 0)) % 2;   // lights change every few seconds
@@ -1274,7 +1290,7 @@ function drawHouse(o){                              // Japanese house: plaster +
   const lift = 120*HF, ox = -lift*TILT*YAW, P = o.pts, n = P.length, horiz = o.w > o.h;
   const cx = P.reduce((a, p) => a + p[0], 0)/n, cy = P.reduce((a, p) => a + p[1], 0)/n;
   const eave = 16, roof = P.map(([x, y]) => { const dx = x - cx, dy = y - cy; return [x + Math.sign(dx)*eave + ox, y + Math.sign(dy)*eave - lift]; });
-  const fade = [player, enemy].some(f => f.hp>0 && polyInside(roof, f.x, f.y)) ? 0.35 : 1;
+  const fade = fighters.some(f => f.hp>0 && polyInside(roof, f.x, f.y)) ? 0.35 : 1;
   ctx.save(); ctx.globalAlpha = fade;
   for (let i=0; i<n; i++){                           // walls that face the camera
     const a = P[i], b = P[(i+1)%n]; let nx = b[1]-a[1], ny = -(b[0]-a[0]);
@@ -1350,7 +1366,7 @@ function wallTreeDraw(t){
   const sp = wallTreeSprite(t.kind, t.seed); if (!sp) return;
   const dw = sp.c.width*PX*t.s, dh = sp.c.height*PX*t.s/TILT, x = Math.round(t.x/PX)*PX, y = Math.round(t.y/PX)*PX;
   if (x + dw/2 < camX - 200 || x - dw/2 > camX + VW() + 200 || y < camY - 200 || y - dh > camY + VH() + 200) return;   // off screen
-  const fade = [player, enemy].some(f => f.hp>0 && f.y < t.y - 8 && f.y > t.y - dh*0.9 && Math.abs(f.x - t.x) < dw*0.42) ? 0.4 : 1;   // see through it when a fighter stands behind
+  const fade = fighters.some(f => f.hp>0 && f.y < t.y - 8 && f.y > t.y - dh*0.9 && Math.abs(f.x - t.x) < dw*0.42) ? 0.4 : 1;   // see through it when a fighter stands behind
   ctx.save(); ctx.imageSmoothingEnabled = false; ctx.globalAlpha = fade;
   ctx.fillStyle = 'rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(x, y - 2, dw*0.28, dw*0.08, 0, 0, 7); ctx.fill();
   if (t.flip){ ctx.translate(x, 0); ctx.scale(-1, 1); ctx.drawImage(sp.c, -dw/2, y - dh, dw, dh); } else ctx.drawImage(sp.c, x - dw/2, y - dh, dw, dh);
@@ -1367,7 +1383,7 @@ function paintWallFloor(g, w, h, dark, mid, specks){   // dense undergrowth unde
 function drawDecor(d){                              // standing torii gate, facing the camera
   if (d.kind!=='torii') return;
   const x = W*d.x, y = d.y, hgt = 150*HF, sp = 56;
-  ctx.save(); ctx.globalAlpha = [player, enemy].some(f => f.y < y + 4 && f.y > y - hgt - 30 && Math.abs(f.x - x) < sp + 30) ? 0.4 : 1;
+  ctx.save(); ctx.globalAlpha = fighters.some(f => f.y < y + 4 && f.y > y - hgt - 30 && Math.abs(f.x - x) < sp + 30) ? 0.4 : 1;
   ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x - sp - 6, y + 2, sp*2 + 12, 6);
   for (const px of [x - sp, x + sp]){ poly([[px + 6, y], [px + 12, y - 4], [px + 12 - hgt*TILT*YAW*0.2, y - hgt - 4], [px + 6, y - hgt]], '#8a1f12'); ctx.fillStyle = '#c8321e'; ctx.fillRect(px - 6, y - hgt, 12, hgt); ctx.fillStyle = '#e84a2e'; ctx.fillRect(px - 6, y - hgt, 4, hgt); ctx.fillStyle = '#1a0a06'; ctx.fillRect(px - 8, y - 10, 16, 10); }
   ctx.fillStyle = '#c8321e'; ctx.fillRect(x - sp - 10, y - hgt*0.78, sp*2 + 20, 10);           // nuki
@@ -1552,7 +1568,7 @@ function growIce(z, dt){                           // advance the ice front: sma
   }
   for (; z.built <= z.front; z.built += 18){       // never build ice on top of anyone (no one gets stuck inside it)
     const wx = z.x+c*z.built, wy = z.y+s*z.built;
-    if ([player, enemy].some(u => u.hp>0 && Math.hypot(u.x-wx, u.y-wy) < u.r + 18 + 4)) continue;
+    if (fighters.some(u => u.hp>0 && Math.hypot(u.x-wx, u.y-wy) < u.r + 18 + 4)) continue;
     OBST.push({type:'circle', x:wx, y:wy, r:18, ice:true, ttl:2, owner:f, wi:Math.round(z.built/18), ph:f.phosT>0});
   }
   if (z.front >= z.len) z.t = 0;                   // fully grown
@@ -1598,9 +1614,11 @@ const aimA = (c, a) => c + Math.round(Math.max(0, Math.min(1, a))*255).toString(
 function aaReach(f){ return f.id==='naruto' && f.nrR > 0 ? 70 : f.id==='todoroki' ? 170 : f.id==='reze' ? 266 : MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : f.empT>0 ? BLAST_REACH : 0); }
 function inAAR(f, tg){ return !!tg && tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) <= aaReach(f) + tg.r; }
 function aaCands(f){                                // everything an auto can hit: the enemy and, for Jin-Woo, his shadows
-  const e = f===player ? enemy : player, out = [];
-  if (e.hp>0) out.push(e);
-  if (e.id==='jinwoo') for (const s of JW.sol){ if (s.f!==e || s.dis || s.dead || (s.anim && s.anim.name==='summon')) continue; out.push(JW.proxyOf(s)); }
+  const out = [];
+  for (const e of foesOf(f)){
+    if (e.hp>0) out.push(e);
+    if (e.id==='jinwoo') for (const s of JW.sol){ if (s.f!==e || s.dis || s.dead || (s.anim && s.anim.name==='summon')) continue; out.push(JW.proxyOf(s)); }
+  }
   return out;
 }
 function aaPick(f, mx, my, pad){ let b = null, bd = 1e9; for (const c of aaCands(f)){ const d = Math.hypot(mx-c.x, my-c.y); if (d < c.r+pad && d < bd){ bd = d; b = c; } } return b; }
@@ -1853,7 +1871,7 @@ function aimDraw(f, s, T){
 function drawAimLayer(){                            // auto attack ring + windups, then the held ability's indicator (under the fighters)
   const T = performance.now()/1000;
   ctx.save(); ctx.lineCap = 'round';
-  for (const f of [player, enemy]){
+  for (const f of fighters){
     if (true) continue;
     const w = f.aaW; const p = 1 - w.t/w.total, col = f===player ? '#7fe3ff' : '#ff6a6a';
     ctx.save(); ctx.strokeStyle = aimA(col, .3); ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(f.x, f.y, f.r + 10, 0, 7); ctx.stroke();
@@ -1955,6 +1973,8 @@ function ultTick(f, dt){
 }
 function hit(f, dmg, src, kx, ky){
   if (f.inv > 0 || f.hp <= 0) return;
+  if (src && src !== f && src.team && f.team && src.team === f.team) return;   // no friendly fire
+  if (src && src !== f && src.team) f.lastHit = src;
   if (f.id==='levi' && f.lvR && f.lvR.go) return;   // R tether pull: untouchable (stuns still land)
   if (f.id==='sasuke' && SD.blink(f, dmg, src)) return;   // Sharingan: blinks away from the next skillshot
   if (src && src.id==='denji' && !HIT_TICK) dmg *= DJ.dealMul(src);   // Denji: -15% damage, Bloodlust (more HP) +damage
@@ -1998,7 +2018,7 @@ function hit(f, dmg, src, kx, ky){
 // ---------- SKILLS (per character) ----------
 let JW_T = null;
 var AA_OV = null;
-const foe = f => { if (AA_OV && AA_OV.f===f) return AA_OV.t; const t = f.team==='p' ? enemy : player; return JW_T && t.id==='jinwoo' && f.id!=='jinwoo' ? JW_T(f, t) : t; };   // Jin-Woo's shadows can be the target: all skill geometry hits them
+const foe = f => { if (AA_OV && AA_OV.f===f) return AA_OV.t; return retarget(f, realFoe(f)); };   // Jin-Woo's shadows can be the target: all skill geometry hits them
 
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 100;                              // Sukuna W teleport distance
@@ -2138,7 +2158,7 @@ const SKILLS = {
     //    Breaks past 6m or without line of sight. Q again: pull Midoriya to where the enemy was
     q:{name:'Black Whip', label:f => (f.tether && !f.tether.pulled) ? 'PULL' : 'Black Whip', cd:10, est:0, cast(f,a){
       MD.lash(f, a);   // the lash: one 360 spin round him, not aimed. It grapples EVERY enemy in range (Jin-Woo and his soldiers)
-      const real = f.team==='p' ? enemy : player, all = [real];
+      const real = realFoe(f), all = [real];
       if (real.id==='jinwoo') for (const s of JW.sol) if (s.f===real && !s.dis && !s.dead && !(s.anim && s.anim.name==='summon')) all.push(JW.proxyOf(s));
       const got = all.filter(tg => tg.hp>0 && Math.hypot(tg.x-f.x, tg.y-f.y) < WHIP_CONNECT + tg.r && !losBlocked(f, tg));
       if (got.length){
@@ -2570,15 +2590,17 @@ function steerAround(f){                           // bots: if terrain is right 
   f.steerSide = -(f.steerSide||1);
 }
 function separate(){                               // fighters are solid: never overlap (airborne Bakugo passes over)
-  const a = player, b = enemy;
-  if (a.hp<=0 || b.hp<=0 || a.fly || b.fly || (a.lunge && a.lunge.ghost) || (b.lunge && b.lunge.ghost)) return;   // Zenitsu dashes through
-  let dx = b.x-a.x, dy = b.y-a.y, d = Math.hypot(dx,dy);
-  const min = a.r + b.r;
-  if (d >= min) return;
-  if (d < 0.001){ dx = 1; dy = 0; d = 1; }
-  const push = (min - d)/2, ux = dx/d, uy = dy/d;
-  a.x -= ux*push; a.y -= uy*push; b.x += ux*push; b.y += uy*push;
-  for (const f of [a,b]){ f.x = Math.min(W-f.r, Math.max(f.r, f.x)); f.y = Math.min(H-f.r, Math.max(f.r, f.y)); pushOut(f); }
+  for (let i = 0; i < fighters.length; i++) for (let j = i + 1; j < fighters.length; j++){
+    const a = fighters[i], b = fighters[j];
+    if (a.hp<=0 || b.hp<=0 || a.fly || b.fly || (a.lunge && a.lunge.ghost) || (b.lunge && b.lunge.ghost)) continue;   // Zenitsu dashes through
+    let dx = b.x-a.x, dy = b.y-a.y, d = Math.hypot(dx,dy);
+    const min = a.r + b.r;
+    if (d >= min) continue;
+    if (d < 0.001){ dx = 1; dy = 0; d = 1; }
+    const push = (min - d)/2, ux = dx/d, uy = dy/d;
+    a.x -= ux*push; a.y -= uy*push; b.x += ux*push; b.y += uy*push;
+    for (const f of [a,b]){ f.x = Math.min(W-f.r, Math.max(f.r, f.x)); f.y = Math.min(H-f.r, Math.max(f.r, f.y)); pushOut(f); }
+  }
 }
 function blueRecast(f){                            // Gojo: press Q again to stop the orb where it is
   if (f.blueOrb && bullets.includes(f.blueOrb)){ const b = f.blueOrb; play3(f, 'q_recast', Math.atan2(b.y-f.y, b.x-f.x), {dur:0.3}); f.blueOrb.life = 0; f.blueOrb = null; return true; }
@@ -2702,7 +2724,7 @@ const DIFF = {
 const DIFF_ORDER = ['easy', 'normal', 'hard'];
 let difficulty = 'easy';
 let SIM_TIER = null;
-const tierOf = f => SIM_TIER ? SIM_TIER[f.team] : ((!bots && f===enemy && !training) ? difficulty : 'normal');
+const tierOf = f => SIM_TIER ? (SIM_TIER[f.team] || 'normal') : ((!bots && f!==player && !training) ? difficulty : 'normal');
 const botDiff = f => DIFF[tierOf(f)];
 // Dodge odds = tier skill x ability difficulty. Rating: 1 easy, 2 medium, 3 hard, 4 no sidestep (lock-on / leave-range)
 const DODGE_BASE = {easy:0.30, normal:0.70, hard:0.92}, DODGE_MULT = [0, 1, 0.7, 0.4, 0];
@@ -3497,10 +3519,11 @@ function runAI(f, o, dt){
 
 // ---------- UPDATE ----------
 function update(dt){
-  tick3(player, dt); tick3(enemy, dt); FX3.update(dt); MD.update(dt); TD.update(dt); TJ3.update(dt); ZN.update(dt); JW.update(dt); SD.update(dt); DJ.update(dt); RZ.update(dt); PW.update(dt); LV.update(dt); NR.update(dt);
+  for (const f_ of fighters) tick3(f_, dt); FX3.update(dt); MD.update(dt); TD.update(dt); TJ3.update(dt); ZN.update(dt); JW.update(dt); SD.update(dt); DJ.update(dt); RZ.update(dt); PW.update(dt); LV.update(dt); NR.update(dt);
   // player: bot by default (press M for manual control)
-  if (demo) runDemo(dt);
-  else if (bots) runAI(player, enemy, dt);
+  if (NET.on) netControl(dt);
+  else if (demo) runDemo(dt);
+  else if (bots) runAI(player, realFoe(player), dt);
   else {
   let dx = (keys[KB.right]?1:0) - (keys[KB.left]?1:0);
   let dy = (keys[KB.down]?1:0) - (keys[KB.up]?1:0);
@@ -3536,9 +3559,10 @@ function update(dt){
       else if (performance.now() >= ultRefillAt){ player.ult = 100; ultRefillAt = 0; }
     }
     player.hp = player.max;
-  } else runAI(enemy, player, dt);
+  } else if (!NET.on){ runAI(enemy, realFoe(enemy), dt); for (const f_ of fighters) if (f_ !== player && f_ !== enemy) runAI(f_, realFoe(f_), dt); }
+  for (const f_ of fighters) if (f_.hp <= 0){ f_.vx = f_.vy = 0; f_.dashT = 0; f_.aaW = null; if (!f_.dieLogged){ f_.dieLogged = true; if (MP.mode !== '1v1'){ const k = f_.lastHit && f_.lastHit.id && ROSTER[f_.lastHit.id] ? f_.lastHit : null; MP.feed.push({t: performance.now(), txt: (k ? ROSTER[k.id].name.toUpperCase() + ' DEFEATED ' : '') + ROSTER[f_.id].name.toUpperCase() + (k ? '' : ' FELL'), col: teamCol(f_)}); } } }   // the fallen stand still while the others fight on
 
-  for (const f of [player, enemy]){
+  for (const f of fighters){
     if (f.qgap>0) f.qgap -= dt;
     if (f.qst>0){ f.qwin -= dt; if (f.qwin<=0){ f.qst = 0; const qs = SKILLS[f.id] && SKILLS[f.id].q; if (qs) f.cd.q = qs.cd; } }   // window over: cooldown
     if (f.chan){ if (f.stun>0) f.chan = null; else { f.chan.t -= dt; if (f.chan.t <= 0) finishChannel(f); } }   // channel: stun interrupts
@@ -3605,7 +3629,7 @@ function update(dt){
   for (let i=zones.length-1;i>=0;i--){
     const z = zones[i]; z.t -= dt; z.tick -= dt;
     if (z.kind==='blue'){
-      const tg = foe(z.src), d = Math.hypot(z.x-tg.x, z.y-tg.y);
+      const tg = zoneFoe(z), d = Math.hypot(z.x-tg.x, z.y-tg.y);
       if (tg.hp>0 && d < z.r){
         tg.slowT = 0.15;                         // outer ring: slowed while inside
         // pull = their slowed walk speed: walking out keeps them stuck in place, standing still sucks them in. Dashes beat it
@@ -3621,7 +3645,7 @@ function update(dt){
     if (z.kind==='sixfold') growSix(z, dt);
     if (z.kind==='todocone') growCone(z, dt);
     if (z.kind==='flashfreeze'){                     // freezing air (heavy slow, ignores walls), then it ignites
-      const tg = foe(z.src), inside = tg.hp>0 && inCone(z, tg.x, tg.y, tg.r);
+      const tg = zoneFoe(z), inside = tg.hp>0 && inCone(z, tg.x, tg.y, tg.r);
       if (inside) tg.slowT = Math.max(tg.slowT, 0.1);
       if (z.t<=0 && !z.done){
         z.done = true;
@@ -3635,7 +3659,7 @@ function update(dt){
       }
     }
     if (z.kind==='shrine'){
-      const tg = foe(z.src), sx = tg.x-z.x, sy = tg.y-z.y, d = Math.hypot(sx,sy) || 1;
+      const tg = zoneFoe(z), sx = tg.x-z.x, sy = tg.y-z.y, d = Math.hypot(sx,sy) || 1;
       if (tg.hp>0 && d < z.r && z.tick<=0){ hit(tg, 1.4, z.src); z.tick = 0.25; }   // continuous damage
       if (z.trapped && tg.hp>0){                     // inside: unbroken segments hold, only a breach lets him out
         const lim = z.r - tg.r;
@@ -3653,14 +3677,14 @@ function update(dt){
   }
   separate();                                       // again after walls push anyone around
   for (let i=timers.length-1;i>=0;i--){ timers[i].t -= dt; if (timers[i].t<=0){ const tm = timers.splice(i,1)[0]; tm.fn(); } }
-  for (const f of [player, enemy]) if (f.charge>0) f.charge -= dt;
+  for (const f of fighters) if (f.charge>0) f.charge -= dt;
   for (let i=beams.length-1;i>=0;i--){ beams[i].t -= dt; if (beams[i].t<=0) beams.splice(i,1); }
   for (let i=arcs.length-1;i>=0;i--){ arcs[i].t -= dt; if (arcs[i].t<=0) arcs.splice(i,1); }
 
   // bullets
   for (let i=bullets.length-1;i>=0;i--){
     const b = bullets[i];
-    const tgt = b.team==='p' ? enemy : player;
+    const tgt = bulletFoe(b);
     // Infinity: projectiles inside the field are suspended
     if (tgt.infT>0 && Math.hypot(b.x-tgt.x, b.y-tgt.y) < INF_R){ b.frozen = true; continue; }
     b.frozen = false;
@@ -3748,7 +3772,7 @@ function update(dt){
     }
     if (b.life<=0 || b.x<0 || b.x>W || b.y<0 || b.y>H){ if (b.onEnd) b.onEnd(b); bullets.splice(i,1); }
   }
-  for (const u of [player, enemy]) if (!u.fly){ pushOut(u); pushOut(u); }   // last word: nobody ends a frame inside terrain or ice
+  for (const u of fighters) if (!u.fly){ pushOut(u); pushOut(u); }   // last word: nobody ends a frame inside terrain or ice
   solidifyMinions();                                // ...and neither do minions / shadows
   for (let i=fx.length-1;i>=0;i--){ fx[i].t -= dt; fx[i].y -= 30*dt; if (fx[i].t<=0) fx.splice(i,1); }
 }
@@ -3796,8 +3820,8 @@ function drawFighter(f){
   else { ctx.beginPath(); ctx.ellipse(0, f.r*0.8, f.r, f.r*0.4, 0, 0, 7); ctx.fill(); }
   if (DISP.hi && f===enemy && f.hp>0){ const th = SPR3D[f.id], rx = th ? 24/CAM_Z : f.r+8, ry_ = th ? 9/CAM_Z : (f.r+6)*0.4, cy_ = th ? 0 : f.r*0.8, ga_ = ctx.globalAlpha;   // enemy highlight ring (SETTINGS > DISPLAY)
     ctx.save(); ctx.strokeStyle = DISP.hc; ctx.fillStyle = DISP.hc; ctx.shadowColor = DISP.hc; ctx.shadowBlur = 8; ctx.lineWidth = 2.5; ctx.globalAlpha = ga_*.9; ctx.beginPath(); ctx.ellipse(0, cy_, rx, ry_, 0, 0, 7); ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = ga_*.16; ctx.fill(); ctx.restore(); }
-  if (player.id===enemy.id){ const k3 = SPR3D[f.id] ? 1/CAM_Z : 1, ry = SPR3D[f.id] ? 0 : f.r*0.8, ga = ctx.globalAlpha;   // team ring under the feet, mirror matches only: blue = you, red = enemy
-    ctx.globalAlpha = ga*0.5; ctx.strokeStyle = f.team==='p' ? '#3da5ff' : '#ff4040'; ctx.lineWidth = 1.5*k3; ctx.beginPath(); ctx.ellipse(0, ry, (SPR3D[f.id] ? 17 : f.r+2)*k3, (SPR3D[f.id] ? 6 : (f.r+2)*0.4)*k3, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }
+  if (player.id===enemy.id || MP.mode !== '1v1'){ const k3 = SPR3D[f.id] ? 1/CAM_Z : 1, ry = SPR3D[f.id] ? 0 : f.r*0.8, ga = ctx.globalAlpha;   // team ring under the feet, mirror matches only: blue = you, red = enemy
+    ctx.globalAlpha = ga*0.5; ctx.strokeStyle = teamCol(f); ctx.lineWidth = 1.5*k3; ctx.beginPath(); ctx.ellipse(0, ry, (SPR3D[f.id] ? 17 : f.r+2)*k3, (SPR3D[f.id] ? 6 : (f.r+2)*0.4)*k3, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }
   const img = sprites[f.id], is3d = SPR3D[f.id] && draw3d(f);
   if (is3d){ if (f.hp<=0){ ctx.restore(); return; } }
   else if (img){ ctx.drawImage(img, -32, -32, 64, 64); }
@@ -3860,13 +3884,33 @@ function drawFighter(f){
   if (f.stun>0){ ctx.fillStyle = '#ffd93d'; ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center'; ctx.fillText('*', f.x, f.y-(SPR3D[f.id] ? 78 : f.r+8)); }
   if (admin){ ctx.strokeStyle = '#39ff6a'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, 7); ctx.stroke(); }   // admin: the real hitbox on the ground
 }
+function mpHud(){                                  // 2-4 fighter roster: your side on the left, the rest on the right, kill feed under it
+  ctx.save();
+  const L = fighters.filter(f => f.team === meF().team), R = fighters.filter(f => f.team !== meF().team);
+  const col = (list, x) => list.forEach((f, i) => {
+    const y = 16 + i*30, w = 240, p = Math.max(0, f.hp/f.max);
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y, w, 24);
+    ctx.fillStyle = f.hp > 0 ? teamCol(f) : '#555'; ctx.fillRect(x+2, y+2, (w-4)*p, 20);
+    ctx.strokeStyle = teamCol(f); ctx.lineWidth = 2; ctx.strokeRect(x, y, w, 24);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText((f.tag || ROSTER[f.id].name).toUpperCase() + (f === meF() ? ' (YOU)' : '') + (f.hp <= 0 ? '  X' : ''), x+8, y+13);
+  });
+  col(L, 16); col(R, SW-256);
+  const now = performance.now(); MP.feed = MP.feed.filter(e => now - e.t < 6000);
+  ctx.textAlign = 'right'; ctx.font = 'bold 12px monospace';
+  MP.feed.forEach((e, i) => { ctx.fillStyle = 'rgba(0,0,0,.6)'; const tw = ctx.measureText(e.txt).width; ctx.fillRect(SW-16-tw-10, 16 + R.length*30 + 6 + i*22, tw+10, 20); ctx.fillStyle = e.col; ctx.fillText(e.txt, SW-21, 16 + R.length*30 + 17 + i*22); });
+  if (meF().hp <= 0 && aliveTeams() >= 2){ ctx.textAlign = 'center'; ctx.fillStyle = '#ffd93d'; ctx.font = 'bold 18px monospace'; ctx.fillText('YOU FELL  -  WATCHING', SW/2, 60); }
+  ctx.restore();
+}
 let _fpsT = 0, _fpsN = 0, _fps = 0;
 function hud(){
+  const player = meF();
   _fpsN++; { const n_ = performance.now(); if (n_ - _fpsT > 500){ _fps = Math.round(_fpsN*1000/(n_ - _fpsT)); _fpsN = 0; _fpsT = n_; } }
   if (DISP.fps){ ctx.fillStyle = '#7dffa8'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'right'; ctx.fillText(_fps+' FPS', SW-8, SH-20); ctx.textAlign = 'center'; }
   // top bars
-  bar(16,16,300,22,player.hp/player.max,'#3aa0ff',PROF.alias ? PROF.alias.toUpperCase()+' ('+ROSTER[player.id].name.toUpperCase()+')' : ROSTER[player.id].name.toUpperCase());
-  bar(SW-316,16,300,22,enemy.hp/enemy.max,'#ff4d4d',ROSTER[enemy.id].name.toUpperCase());
+  if (MP.mode !== '1v1') mpHud();
+  if (MP.mode === '1v1') bar(16,16,300,22,player.hp/player.max,'#3aa0ff',PROF.alias ? PROF.alias.toUpperCase()+' ('+ROSTER[player.id].name.toUpperCase()+')' : ROSTER[player.id].name.toUpperCase());
+  if (MP.mode === '1v1') bar(SW-316,16,300,22,enemy.hp/enemy.max,'#ff4d4d',ROSTER[enemy.id].name.toUpperCase());
   [[player,16,'left'],[enemy,SW-16,'right']].forEach(([f,x,al]) => {      // Midoriya gear / Todoroki temperature status
     if (f.id==='todoroki'){
       ctx.textAlign = al; ctx.font = 'bold 11px monospace'; ctx.fillStyle = f.phosT>0 ? '#ffe9a0' : (f.temp||0) > 10 ? '#ff9a7a' : (f.temp||0) < -10 ? '#9fd0ff' : '#ffffff';
@@ -3918,7 +3962,7 @@ function hud(){
     });
     ctx.textAlign = 'center';
   } else
-  ctx.fillText('WINS  '+ROSTER[matchP].name.toUpperCase()+' '+(wins[matchP]||0)+' - '+(wins[matchE]||0)+' '+ROSTER[matchE].name.toUpperCase(), SW/2, 14);
+  if (MP.mode === '1v1') ctx.fillText('WINS  '+ROSTER[matchP].name.toUpperCase()+' '+(wins[matchP]||0)+' - '+(wins[matchE]||0)+' '+ROSTER[matchE].name.toUpperCase(), SW/2, 14);
   if (!bots && !training){ ctx.fillStyle = difficulty==='easy' ? '#7dffa8' : difficulty==='hard' ? '#ff6a5a' : '#ffd93d'; ctx.font = 'bold 11px monospace'; ctx.fillText('BOT: '+difficulty.toUpperCase(), SW/2, 28); ctx.fillStyle = '#fff'; ctx.font = 'bold 12px monospace'; }
   if (pickFirst && !training && performance.now() - pickAt < 2500){   // waiting for the 2nd number
     ctx.fillStyle = 'rgba(5,10,30,.85)'; ctx.fillRect(SW/2-190, SH/2-28, 380, 56);   // (matchup picker)
@@ -3973,14 +4017,14 @@ function hud(){
     else if (sk.charges && charges < maxCh(f,kk) && cdLeft>0) mid = 'next '+cdLeft.toFixed(1);
     if (mid){ ctx.font = 'bold 13px monospace'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.8)'; ctx.strokeText(mid, x+bw/2, y+25); ctx.fillStyle = '#fff'; ctx.fillText(mid, x+bw/2, y+25); }
   });
-  if (player.hp<=0 || enemy.hp<=0){
+  if (aliveTeams() < 2){
     ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(0,0,SW,SH);
     ctx.fillStyle='#ffd93d'; ctx.font='bold 48px monospace';
-    ctx.fillText(player.hp>0?'YOU WIN':'YOU LOSE', SW/2, SH/2);
+    ctx.fillText(iWon()?'YOU WIN':'YOU LOSE', SW/2, SH/2);
     ctx.fillStyle='#fff'; ctx.font='bold 18px monospace';
     ctx.fillStyle = '#ffb020'; ctx.fillRect(REPLAY.x, REPLAY.y, REPLAY.w, REPLAY.h);
     ctx.fillStyle = '#111'; ctx.font = 'bold 20px monospace'; ctx.textBaseline = 'middle';
-    ctx.fillText('REPLAY', SW/2, REPLAY.y + REPLAY.h/2);
+    ctx.fillText(NET.on && !NET.host ? 'WAITING FOR HOST' : 'REPLAY', SW/2, REPLAY.y + REPLAY.h/2);
   }
 }
 function drawAdmin(){                              // projected DPS = est dmg per cast / cooldown (+ autos)
@@ -4026,7 +4070,7 @@ function bar(x,y,w,h,p,col,label){
   ctx.fillText(label, x+6, y+h/2);
 }
 function updateCam(){                              // always follow your character (the first pick), even when watching bots
-  const f = player;
+  const me_ = meF(); const f = (me_.hp > 0 || MP.mode === '1v1') ? me_ : (fighters.find(u => u.hp > 0 && u.team === me_.team) || fighters.find(u => u.hp > 0) || me_);
   camX = Math.max(0, Math.min(W-VW(), f.x - VW()/2)); camY = Math.max(0, Math.min(H-VH(), f.y - VH()/2));
   mouse.x = mouse.sx/CAM_Z + camX; mouse.y = mouse.sy/(CAM_Z*TILT) + camY;
 }
@@ -4111,7 +4155,7 @@ const FX3 = (() => {
     for (const z of zones) if (z.kind === 'boom' && z.src && z.src.id === 'bakugo' && !bkZ.has(z)){ bkZ.add(z);
       if (z.r >= 60){ effect('howitzer_boom', SX(z.x), SY(z.y), 0, 2.2, true); shake = 0.55; }
       else { const a0 = z.src ? Math.atan2(z.src.y - z.y, z.src.x - z.x) + Math.PI : 0; effectDir('prop_blast', SX(z.src.x + Math.cos(a0) * 4), SY(z.src.y + Math.sin(a0) * 4), 32, 1.9, Math.atan2(Math.sin(a0) * TILT, Math.cos(a0))); shake = Math.max(shake, 0.12); } }
-    for (const f of [player, enemy]) if (f.id === 'bakugo' && f.fly){
+    for (const f of fighters) if (f.id === 'bakugo' && f.fly){
       if (!bkF.has(f.fly)){ bkF.add(f.fly); effect('blast_boom', SX(f.x), SY(f.y), 26, 2.2); shake = Math.max(shake, 0.2); }
       f.fly.tr = (f.fly.tr || 0) + dt;
       if (f.fly.tr > 0.025){ f.fly.tr = 0; const k = Math.min(1, f.fly.t / f.fly.dur); effect('ap_hit', SX(f.x), SY(f.y), 34 + Math.sin(k * Math.PI) * 60, 1.6); }
@@ -4135,7 +4179,7 @@ const FX3 = (() => {
   function flyAng(f){ const q = f.fly, k = Math.min(1, q.t / q.dur); return Math.atan2((q.ty - q.sy) * CAM_Z * TILT - 60 * Math.PI * Math.cos(k * Math.PI), (q.tx - q.sx) * CAM_Z); }
   function bakDepth(item){
     for (const b of bullets) if (b.src && b.src.id === 'bakugo' && b.line){ const X = SX(b.x), Y = SY(b.y); item(b.y, () => drawFx('ap_shot', b.age || 0, X, Y, 34, Math.atan2(b.vy * TILT, b.vx), 2)); }
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'bakugo' || f.hp <= 0) continue; const X = SX(f.x), Y = SY(f.y);
       if (f.howT >= 0){
         const t = f.howT, c = Math.min(1, t / 2), sc = 1.15 + 0.4 * c, amp = 5 + 15 * c;
@@ -4354,7 +4398,7 @@ function spaceFloor(cx, cy, R, t, pal, swirl){
       const R = voidR(v); if (R < 3) continue;
       spaceFloor(v.x, v.y, R, v.t, PAL.ice, true);
     }
-    for (const f of [player, enemy]) if (f.id === 'gojo' && f.infT > 0 && f.hp > 0)   // Infinity bubble edge
+    for (const f of fighters) if (f.id === 'gojo' && f.infT > 0 && f.hp > 0)   // Infinity bubble edge
       ring(SX(f.x), SY(f.y), INF_R * CAM_Z, (Math.floor(T * 10) % 3) ? '#a8ecff' : '#ffffff', {dash: 40, phase: T * 0.2});
     for (const b of bullets){
       if (b.aura && b.src && b.src.id === 'gojo') ring(SX(b.x), SY(b.y), b.aura.r * CAM_Z, '#a84dff', {dash: 24, phase: -(b.age || 0) * 0.8});   // Purple's pull
@@ -4402,7 +4446,7 @@ function spaceFloor(cx, cy, R, t, pal, swirl){
     push({y: z.y + 12, fn: () => screen(() => {                          // the shrine erupts in the middle; see-through when someone is on / behind it
       const s = FXS.shrine; if (!s || !s.img.complete) return; const k = Math.floor(z.age3 * s.fps) % s.n, Hh = Math.round(s.h * 2 * up);
       const x0 = X0 - s.w, y0 = Y0 + 18 - Hh, x1 = x0 + s.w * 2, y1 = Y0 + 18;
-      const over = [player, enemy].some(f => { const cx = SX(f.x), cy = SY(f.y); return f.hp > 0 && cx + 12 > x0 + 10 && cx - 12 < x1 - 10 && cy > y0 + 20 && cy - 62 < y1 - 6; });
+      const over = fighters.some(f => { const cx = SX(f.x), cy = SY(f.y); return f.hp > 0 && cx + 12 > x0 + 10 && cx - 12 < x1 - 10 && cy > y0 + 20 && cy - 62 < y1 - 6; });
       z.see = (z.see || 0) + ((over ? 1 : 0) - (z.see || 0)) * 0.25;
       ctx.globalAlpha = fade * (1 - 0.62 * z.see); ctx.drawImage(s.img, k * s.w, 0, s.w, Math.ceil(s.h * up), Math.round(x0 + ME), Math.round(y0 + MF), s.w * 2, Hh); ctx.globalAlpha = 1; })});
   }
@@ -4446,7 +4490,7 @@ function spaceFloor(cx, cy, R, t, pal, swirl){
       }
       disc(X, Y0, 9 * k + 4, '#ff4a3a', 1, 1); disc(X, Y0, 5 * k + 2, '#ffffff', 1, 1);
     }
-    for (const f of [player, enemy]) if (f.id === 'gojo' && f.charge > 0 && f.redT > 0){   // Red winding up in his hand
+    for (const f of fighters) if (f.id === 'gojo' && f.charge > 0 && f.redT > 0){   // Red winding up in his hand
       const a = f.aim, X = SX(f.x + Math.cos(a) * 14), Y = SY(f.y + Math.sin(a) * 14) - HAND_Z * 0.75, k = 1 - f.charge / (f.chargeMax || 0.35);
       disc(X, Y, 3 + 6 * k, '#ff4a3a', 1, 1); disc(X, Y, 1 + 3 * k, '#ffffff', 1, 1);
     }
@@ -4537,7 +4581,7 @@ const MD = (() => {
   }
   function depth(push){
     if (!has) return;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'midoriya' || !f.tether) continue;
       for (const tg of (f.tether.its ? f.tether.its.map(whipRes).filter(Boolean) : [foe(f)])){
         if (typeof isHidden === 'function' && isHidden(f, tg) && f !== player && !bots) continue;
@@ -4587,7 +4631,7 @@ const MD = (() => {
   }
   function update(dt){
     T += dt; shake = Math.max(0, shake - dt); flash.t = Math.max(0, flash.t - dt);
-    for (const f of [player, enemy]){ if (f.id !== 'midoriya') continue;
+    for (const f of fighters){ if (f.id !== 'midoriya') continue;
       if (f.tether) f.tether.w = (f.tether.w || 0) + dt;
       f._fl = Math.max(0, (f._fl || 0) - dt);                          // sparkle flash after using an ability
       const ready = f.hp > 0 ? (f.cd.q <= 0 ? 1 : 0) + (f.cd.w <= 0 ? 1 : 0) + chg(f, 'e') : 0;   // more ready charges (Q, W, E) = more sparkles
@@ -4676,7 +4720,7 @@ const TD = (() => {
     if (!has) return;
     for (const o of OBST) if (o.ice && mine(o.owner)){ push({y: o.y - 0.6, fn: () => drawChunk(o, false)}); push({y: o.y + 0.6, fn: () => drawChunk(o, true)}); }
     for (const b of bullets) if (b.snake && mine(b.src)) push({y: b.y, fn: () => drawSnake(b)});
-    for (const f of [player, enemy]) if (f.cocoon && f.hp > 0 && mine(f.cocoon.src)){ push({y: f.y - 0.6, fn: () => drawCocoon(f, false)}); push({y: f.y + 0.6, fn: () => drawCocoon(f, true)}); }
+    for (const f of fighters) if (f.cocoon && f.hp > 0 && mine(f.cocoon.src)){ push({y: f.y - 0.6, fn: () => drawCocoon(f, false)}); push({y: f.y + 0.6, fn: () => drawCocoon(f, true)}); }
     for (const c of cones) push({y: c.el === 'fire' ? c.y + 2 : c.y + Math.sin(c.a) * 30, fn: () => drawCone(c)});
     for (const u of ults) push({y: u.y + 8, fn: () => drawUlt(u)});
   }
@@ -4742,11 +4786,11 @@ const TJ3 = (() => {
   function depth(push){
     if (!has) return;
     for (const e of fxs){ const o = e.f || e; push({y: e.k === 'ring' || e.k === 'ring360' ? o.y + 1 : o.y + (e.a !== undefined ? Math.sin(e.a) * 20 : 1), fn: () => drawFx(e)}); }
-    for (const f of [player, enemy]) if (f.id === 'tanjiro' && f.wpT > 0 && f.hp > 0) push({y: f.y + 1, fn: () => whirl(f)});
+    for (const f of fighters) if (f.id === 'tanjiro' && f.wpT > 0 && f.hp > 0) push({y: f.y + 1, fn: () => whirl(f)});
   }
   function top(){                                  // over everything: thread mark over the enemy, E lock-on line for your own Tanjiro
     if (!has) return;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'tanjiro' || f.hp <= 0) continue; const tg = foe(f); if (!tg || tg.hp <= 0) continue;
       if (typeof isHidden === 'function' && isHidden(tg, f)) continue;
       if (f.threadReady){ const hx = tg.x, hy = tg.y; at(hx, hy, () => { const y = -92 - lift(tg) + Math.sin(T * 5) * 1.5, pu = 0.75 + 0.25 * Math.sin(T * 10);   // Opening Thread ready: red knot mark over his head
@@ -4801,7 +4845,7 @@ const ZN = (() => {
     T += dt;
     for (const b of bolts){ b.age += dt; if (b.endT >= 0) b.endT += dt; else if (b.L && b.f.lunge === b.L){ b.hx = b.f.x; b.hy = b.f.y; } else b.endT = 0; }
     for (const e of slashes) e.t += dt; for (const e of edges) e.t += dt; for (const e of hits) e.t += dt; for (const g of ghosts) g.t += dt;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       const x = f.a3;
       if (f.zapPara > 0) f.zapPara -= dt;
       if (f.zapZ && !(f.stun > 0)) f.zapZ = false;
@@ -4856,7 +4900,7 @@ const ZN = (() => {
     for (const e of hits) push({y: e.y + 30, fn: () => drawHit(e)});
     for (const g of ghosts) push({y: g.y - 0.5, fn: () => tint(g.name, g.fr, g.dir, g.x, g.y, 0.3 * (1 - g.t / 0.22), 'rgb(255,232,120)', g.asleep)});
     for (const z of zones) if (z.kind === 'sixfold' && z.src && z.src.id === 'zenitsu') for (let i = 0; i < 3; i++) if (z.segs[i][0] !== z.P[0]) push({y: z.segs[i][0][1] + 2, fn: () => sixGhost(z, i)});
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'zenitsu' || f.hp <= 0 || !charging(f)) continue;
       push({y: f.y - 0.5, fn: () => at(f.x, f.y, () => { const g = FXT.charge_zap; if (!g.img.complete) return; const k = fi(g, T, true), sc = 1.7;   // lightning crawling over him
         ctx.drawImage(g.img, k * g.w, 0, g.w, g.h, Math.round(-g.ox * sc), Math.round(-36 - g.oy * sc), g.w * sc, g.h * sc); })});
@@ -4866,7 +4910,7 @@ const ZN = (() => {
   }
   function top(){                                          // dash preview for your own Zenitsu while Q is held
     if (!has) return;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'zenitsu' || f.hp <= 0 || !(f === player && !bots && f.zHold > 0)) continue;
       const h = Math.min(1, f.zHold), len = (ZQ_MIN + (ZQ_MAX - ZQ_MIN) * h) * CAM_Z, ex = Math.cos(f.aim) * len, ey = Math.sin(f.aim) * len * TILT;
       at(f.x, f.y, () => { ctx.lineWidth = 2 + 3 * h; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -T * 60;
@@ -4894,7 +4938,7 @@ const JW = (() => {
   const has = typeof document !== 'undefined' && !!document.createElement;
   let T = 0;
   function at(wx, wy, fn){ ctx.save(); ctx.translate(wx, wy); ctx.scale(1 / CAM_Z, 1 / (CAM_Z * TILT)); ctx.imageSmoothingEnabled = false; fn(); ctx.restore(); }
-  const jws = () => [player, enemy].filter(f => f.id === 'jinwoo' && f.hp > 0);
+  const jws = () => fighters.filter(f => f.id === 'jinwoo' && f.hp > 0);
   const mine = f => sol.filter(s => s.f === f && !s.dis);
   const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
   function mk(id, f, x, y, slot){
@@ -5015,7 +5059,7 @@ const JW = (() => {
   }
   function update(dt){
     T += dt;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.id !== 'jinwoo') continue;
       if (!f.jwLock) f.jwLock = [0, 0];
       f.jwLock[0] = Math.max(0, f.jwLock[0] - dt); f.jwLock[1] = Math.max(0, f.jwLock[1] - dt);
@@ -5031,13 +5075,13 @@ const JW = (() => {
       if (f.jwBar > 0) for (const b of bullets){ if (b.team === f.team || b.life <= 0) continue;                                               // soldiers block shots during Q
         for (const s of mine(f)) if (Math.hypot(b.x - s.x, b.y - s.y) < 26 + b.r){ b.life = 0; fx.push({x: s.x, y: s.y - 20, t: 0.5, txt: 'BLOCK'}); break; } }
     }
-    for (const f of [player, enemy]){ if (f.id !== 'jinwoo') continue;
+    for (const f of fighters){ if (f.id !== 'jinwoo') continue;
       for (const b of bullets){ if (b.team === f.team || b.life <= 0) continue;
         if (b.aura){ b.jwTick = (b.jwTick || 0) - dt; if (b.jwTick <= 0){ b.jwTick = 0.25; for (const s of mine(f)){ const d = Math.hypot(b.x - s.x, b.y - s.y); if (d < b.aura.r){ if (d > 4){ const pl = b.aura.pull * 0.25; s.x += (b.x - s.x) / d * pl; s.y += (b.y - s.y) / d * pl; } if (!(f.jwBar > 0)) hurtSol(s, b.aura.dps * 0.25, null); } } } continue; }                // Hollow Purple: pull + area damage
         if (!(b.dmg > 0)) continue;
         for (const s of mine(f)){ if (b.hit && b.hit.has(s)) continue; if (Math.hypot(b.x - s.x, b.y - s.y) < 22 + b.r){ if (b.hit) b.hit.add(s); if (!(f.jwBar > 0)) hurtSol(s, b.dmg, b); if (!b.pierce) b.life = 0; break; } } }
     }
-    for (const f of [player, enemy]) if (f.jwMark > 0) f.jwMark -= dt;
+    for (const f of fighters) if (f.jwMark > 0) f.jwMark -= dt;
     if (!sol.reg){ sol.reg = 1; MINION_SRC.push(() => sol); }
     for (const s of sol){ const x0 = s.x, y0 = s.y; updateSol(s, dt); settleMinion(s, x0, y0); }
     for (let i = sol.length - 1; i >= 0; i--) if (sol[i].dead || sol[i].f.hp <= 0) sol.splice(i, 1);
@@ -5073,7 +5117,7 @@ const JW = (() => {
     if (s.lunge > 0){ const k = Math.sin(s.lunge / 0.2 * Math.PI) * 10; ox = Math.cos(s.la) * k; oy = Math.sin(s.la) * k; }
     at(s.x + ox, s.y + oy, () => {
       ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(0, 0, 14, 5, 0, 0, 7); ctx.fill();
-      if (player.id === enemy.id){ const ga = ctx.globalAlpha; ctx.globalAlpha = ga * 0.5; ctx.strokeStyle = s.f.team === 'p' ? '#3da5ff' : '#ff4040'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, 15, 5.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }   // team ring on soldiers too (mirror matches)
+      if (player.id === enemy.id || MP.mode !== '1v1'){ const ga = ctx.globalAlpha; ctx.globalAlpha = ga * 0.5; ctx.strokeStyle = teamCol(s.f); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(0, 0, 15, 5.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = ga; }   // team ring on soldiers too (mirror matches)
       if (s.id === 'beru' && s.wing > 0) drawWings(s);
       if (s.tpT >= 0 && s.tpTo) ctx.globalAlpha = 0.35;
       const kn = s.st && s.st.knockT > 0 ? 40 * Math.sin(Math.PI * Math.min(1, 1 - s.st.knockT / (s.st.knockMax || 0.7))) : 0;   // knocked up: the body rises, the ground shadow stays
@@ -5178,7 +5222,7 @@ const JW = (() => {
     ctx.restore(); ctx.textAlign = 'center';
   }
   function top(){
-    for (const f of [player, enemy]) if (f.jwMark > 0 && f.hp > 0) at(f.x, f.y, () => { ctx.fillStyle = '#c9a0ff'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText('◆', 0, -62 - 4 * Math.sin(T * 8)); });
+    for (const f of fighters) if (f.jwMark > 0 && f.hp > 0) at(f.x, f.y, () => { ctx.fillStyle = '#c9a0ff'; ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center'; ctx.fillText('◆', 0, -62 - 4 * Math.sin(T * 8)); });
   }
   function style(f, o){                      // Jin-Woo wants mid range inside his aura to farm the bar, then backs off and lets the shadows work
     const n = mine(f).length;
@@ -5280,7 +5324,7 @@ const NR = (() => {
   const FXI = {}; if (has && typeof NR_FXD !== 'undefined') for (const k in NR_FXD){ const d = NR_FXD[k], im = new Image(); im.src = d.src; FXI[k] = Object.assign({img: im}, d); }
   let T = 0; const clones = [], fxs = [], toads = [], bursts = [];
   const at = (wx, wy, fn) => { ctx.save(); ctx.translate(wx, wy); ctx.scale(1 / CAM_Z, 1 / (CAM_Z * TILT)); ctx.imageSmoothingEnabled = false; fn(); ctx.restore(); };
-  const nrs = () => [player, enemy].filter(f => f.id === 'naruto');
+  const nrs = () => fighters.filter(f => f.id === 'naruto');
   const human = f => f === player && (!bots || demo);
   const target = f => human(f) ? (f.nrAimP || {x: mouse.x, y: mouse.y}) : (() => { const t = foe(f); return {x: t.x, y: t.y}; })();
   const clampTo = (c, p, R) => { const dx = p.x - c.x, dy = p.y - c.y, d = Math.hypot(dx, dy); return d <= R ? {x: p.x, y: p.y} : {x: c.x + dx / d * R, y: c.y + dy / d * R}; };
@@ -5471,7 +5515,7 @@ const NR = (() => {
       const k = Math.max(0, f.nrSh) / SH_MAX; at(f.x, f.y, () => { ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(-26, -76, 52, 6); ctx.fillStyle = '#ffb040'; ctx.fillRect(-25, -75, 50 * k, 4); ctx.fillStyle = '#ff6a1f'; ctx.fillRect(-25, -70, 50 * (f.nrR / R_T), 2); });
     }
   }
-  function reset(){ SMASH_MARKS.length = 0; clones.length = 0; fxs.length = 0; toads.length = 0; bursts.length = 0; for (const f of [player, enemy]){ f.nrR = f.nrSh = f.nrW = f.nrSpdT = 0; f.nrP = false; } }
+  function reset(){ SMASH_MARKS.length = 0; clones.length = 0; fxs.length = 0; toads.length = 0; bursts.length = 0; for (const f of fighters){ f.nrR = f.nrSh = f.nrW = f.nrSpdT = 0; f.nrP = false; } }
   function bot(f, o, dist, ea){
     if (f.nrR > 0) return;
     if (f.ult >= 100 && dist < 360 && castSkill(f, 'r', ea)) return;            // stays at range and spams every spell as soon as it is ready
@@ -5510,7 +5554,7 @@ const SD = (() => {
   let T = 0, SD_AA = false;
   if (has){ for (const k in SUSI){ const i = new Image(); i.src = SUSI[k]; SUSI[k] = i; } FIRE.img = new Image(); FIRE.img.src = FIRE.src; FB.img = new Image(); FB.img.src = FB.src; }
   const gc = has ? document.createElement('canvas') : null;
-  const sds = () => [player, enemy].filter(f => f.id === 'sasuke');
+  const sds = () => fighters.filter(f => f.id === 'sasuke');
   const human = f => f === player && !bots && !demo;
   const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
   const rnd = s => { s = Math.sin(s * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -5582,7 +5626,7 @@ const SD = (() => {
     slashes.push({f, x0, y0, x: x0, y: y0, ang: a + w.rel, d: 0, hit: false}); }
   // ---------------- update ----------------
   function update(dt){
-    T += dt; for (const f of [player, enemy]) f.sdSlow = 1;
+    T += dt; for (const f of fighters) f.sdSlow = 1;
     for (const f of sds()){
       f.sdPass = Math.max(0, (f.sdPass === undefined ? 0 : f.sdPass) - dt); f.sdWemp = Math.max(0, (f.sdWemp || 0) - dt); f.sdFlash = Math.max(0, (f.sdFlash || 0) - dt);
       if (f.hp <= 0){ f.sdQ = null; f.sdR = null; continue; }
@@ -5798,7 +5842,7 @@ const SD = (() => {
     if (dist < W_RANGE && f.cd.w <= 0 && (!trap || stuck || waitedFor(f, 'w', 2.5)) && castSkill(f, 'w', ea)) return;                  // Chidori when his dash is down / he is slowed or stunned
     if (dist < Q_RANGE && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
   }
-  function reset(){ balls.length = zones.length = slashes.length = puffs.length = 0; for (const f of [player, enemy]){ f.sdQ = f.sdR = f.sdE = null; f.sdPass = 0; f.sdWemp = 0; } }
+  function reset(){ balls.length = zones.length = slashes.length = puffs.length = 0; for (const f of fighters){ f.sdQ = f.sdR = f.sdE = null; f.sdPass = 0; f.sdWemp = 0; } }
   function threat(f){ for (const z of zones) if (z.f.team !== f.team && !z.struck && Math.hypot(f.x - z.x, f.y - z.y) < z.r + f.r * 0.5 + 25) return z; return null; }   // Chidori slam lightning about to land on f
   const hazards = f => zones.filter(z => z.f.team !== f.team && !z.struck).map(z => ({ref: z, x: z.x, y: z.y, r: z.r + f.r * 0.5 + 25, rating: 1}));   // Chidori slam lightning about to land
   return {threat, hazards, update, pose, depth, ground, top, hud, aim, icon, bot, style, reset, blink, q, w, e, r, slam, setAA: v => { SD_AA = v; }, rClick, Q_RANGE, W_RANGE, E_RANGE, E_R, R_R};
@@ -5820,7 +5864,7 @@ const DJ = (() => {
   const FEAR_SPD = 0.2, POOL_R = 40, POOL_LIFE = 10, POOL_MAX = 8;
   const pools = [], shots = [], puffs = [];
   let T = 0;
-  const djs = () => [player, enemy].filter(f => f.id === 'denji');
+  const djs = () => fighters.filter(f => f.id === 'denji');
   const human = f => f === player && !bots && !demo;
   const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -5878,7 +5922,7 @@ const DJ = (() => {
   // ---------------- per-frame ----------------
   function update(dt){
     T += dt;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.hp <= 0){ f.djQ = 0; f.djW = null; f.djPre = 0; f.djMark = 0; f.djE = null; f.djBleed = null; f.djFear = 0; f.wpT = f.id === 'denji' ? 0 : f.wpT; continue; }
       if (f.djBleed){ const b = f.djBleed; b.t -= dt; b.tk -= dt;
         while (b.tk <= 0 && b.t > -BLEED_TICK){ b.tk += BLEED_TICK; HIT_TICK = true; hit(f, BLEED_TICK, b.src); HIT_TICK = false; if (f.hp <= 0) break; }
@@ -5975,7 +6019,7 @@ const DJ = (() => {
   }
   function depth(push){
     if (!has) return;
-    for (const f of [player, enemy]) if (f.djBleed && f.hp > 0) push({y: f.y + 3, fn: () => drawBleed(f)});
+    for (const f of fighters) if (f.djBleed && f.hp > 0) push({y: f.y + 3, fn: () => drawBleed(f)});
     for (const f of djs()) if (f.djMark > 0 && f.hp > 0){ const tg = foe(f); if (tg && tg.hp > 0) push({y: tg.y + 4, fn: () => drawMark(f)}); }
     for (const s of shots) push({y: s.y + 2, fn: () => drawShot(s)});
     for (const p of puffs) push({y: p.y + 30, fn: () => drawPuff(p)});
@@ -6053,7 +6097,7 @@ const DJ = (() => {
   }
   function reset(){
     pools.length = shots.length = puffs.length = 0;
-    for (const f of [player, enemy]){ f.djQ = 0; f.djQt = 0; f.djQn = 0; f.djW = null; f.djPre = 0; f.djSlam = 0; f.djMark = 0; f.djE = null; f.djBleed = null; f.djFear = 0; f.djSpd = 1; if (f.id === 'denji') f.wpT = 0; }
+    for (const f of fighters){ f.djQ = 0; f.djQt = 0; f.djQn = 0; f.djW = null; f.djPre = 0; f.djSlam = 0; f.djMark = 0; f.djE = null; f.djBleed = null; f.djFear = 0; f.djSpd = 1; if (f.id === 'denji') f.wpT = 0; }
   }
   return {update, pose, depth, ground, top, hud, icon, bot, style, hard, reset, bleed, endQ, dealMul, takeMul, q, w, e, r, recast, isCS};
 })();
@@ -6077,7 +6121,7 @@ const RZ = (() => {
   const E_WIN = 1;
   const shots = [], puffs = [];
   let T = 0;
-  const rzs = () => [player, enemy].filter(f => f.id === 'reze');
+  const rzs = () => fighters.filter(f => f.id === 'reze');
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   const ang = (a, b) => Math.atan2(b.y - a.y, b.x - a.x);
   const live = t => (typeof aaLive === 'function' ? aaLive(t) : (t && t.hp > 0 ? t : null));
@@ -6176,7 +6220,7 @@ const RZ = (() => {
   // ---------------- per-frame ----------------
   function update(dt){
     T += dt;
-    for (const f of [player, enemy]){
+    for (const f of fighters){
       if (f.hp <= 0){ f.rzMarks = null; f.rzSlowT = 0; f.rzSlow = 1; f.rzQ = 0; f.rzEW = 0; continue; }
       if (f.rzMarks){ for (let i = f.rzMarks.length - 1; i >= 0; i--){ f.rzMarks[i] += dt; if (f.rzMarks[i] >= MARK_T) f.rzMarks.splice(i, 1); } }
       if (f.rzSlowT > 0){ f.rzSlowT -= dt; f.rzSlow = FUSE_SLOW; } else f.rzSlow = 1;
@@ -6255,7 +6299,7 @@ const RZ = (() => {
   function top(){}
   function depth(push){
     if (!has) return;
-    for (const f of [player, enemy]) if (f.rzMarks && f.rzMarks.length && f.hp > 0) push({y: f.y + 4, fn: () => drawMarks(f)});
+    for (const f of fighters) if (f.rzMarks && f.rzMarks.length && f.hp > 0) push({y: f.y + 4, fn: () => drawMarks(f)});
     for (const s of shots) push({y: s.y + 2, fn: () => drawShot(s)});
     for (const p of puffs) push({y: p.y + 30, fn: () => drawPuff(p)});
   }
@@ -6294,7 +6338,7 @@ const RZ = (() => {
   }
   function reset(){
     shots.length = puffs.length = 0;
-    for (const f of [player, enemy]){ f.rzN = 0; f.rzQ = 0; f.rzEW = 0; f.rzMarks = null; f.rzSlowT = 0; f.rzSlow = 1; f.rzAimP = null; }
+    for (const f of fighters){ f.rzN = 0; f.rzQ = 0; f.rzEW = 0; f.rzMarks = null; f.rzSlowT = 0; f.rzSlow = 1; f.rzAimP = null; }
   }
   return {update, pose, depth, ground, top, hud, icon, bot, fast, style, reset, auto, aim, eOk, q, w, e, r, AA_RANGE, E_RANGE, Q_RANGE, qDist, Q_R, W_R, R_L, R_HALF, Q_AS};
 })();
@@ -6315,7 +6359,7 @@ const PW = (() => {
   const R_N = 10, R_FALL = 0.7, R_R = 50, R_DMG = 5, R_SLOW = 2, R_MAX = 12, R_INT = 0.28;
   const spears = [], fxs = [];
   let T = 0;
-  const pws = () => [player, enemy].filter(f => f.id === 'power');
+  const pws = () => fighters.filter(f => f.id === 'power');
   const live = t => (typeof aaLive === 'function' ? aaLive(t) : (t && t.hp > 0 ? t : null));
   const clampW = (x, y, r) => [Math.min(W - r, Math.max(r, x)), Math.min(H - r, Math.max(r, y))];
   const say = (f, t, txt) => fx.push({x: f.x, y: f.y - f.r - 16, t: t || 0.8, txt});
@@ -6380,7 +6424,7 @@ const PW = (() => {
   // ---------------- per-frame ----------------
   function update(dt){
     T += dt;
-    for (const f of [player, enemy]){ if (f.pwSlowT > 0 && f.hp > 0){ f.pwSlowT -= dt; f.pwSlow = Q_SLOWM; } else f.pwSlow = 1; }
+    for (const f of fighters){ if (f.pwSlowT > 0 && f.hp > 0){ f.pwSlowT -= dt; f.pwSlow = Q_SLOWM; } else f.pwSlow = 1; }
     for (const f of pws()){
       if (f.hp <= 0){ f.pwMend = null; f.pwDR = 0; f.pwR = null; continue; }
       if (f.pwRushT > 0) f.pwRushT -= dt;
@@ -6526,7 +6570,7 @@ const PW = (() => {
   }
   function reset(){
     spears.length = fxs.length = 0;
-    for (const f of [player, enemy]){ f.pwMend = null; f.pwDR = 0; f.pwR = null; f.pwRushT = 0; f.pwSlowT = 0; f.pwSlow = 1; }
+    for (const f of fighters){ f.pwMend = null; f.pwDR = 0; f.pwR = null; f.pwRushT = 0; f.pwSlowT = 0; f.pwSlow = 1; }
   }
   const hazards = f => spears.filter(p => p.f.team !== f.team && !p.done && p.t < R_FALL + 0.05).map(p => ({ref: p, x: p.x, y: p.y, r: R_R + f.r * 0.5 + 12, rating: 1}));   // blood spear about to stab
   return {update, pose, depth, ground, top, hud, icon, bot, style, reset, hazards, taken, dealt, slam, rClick, breakMend, q, w, r, Q_L, Q_HW, E_HOP, E_IMP, E_R};
@@ -6551,7 +6595,7 @@ const LV = (() => {
   const ROLL_V = 620, ROLL_T = 0.15;
   const fxs = [];
   let T = 0;
-  const lvs = () => [player, enemy].filter(f => f.id === 'levi');
+  const lvs = () => fighters.filter(f => f.id === 'levi');
   const live = t => (typeof aaLive === 'function' ? aaLive(t) : (t && t.hp > 0 ? t : null));
   const say = (f, t, txt) => fx.push({x: f.x, y: f.y - f.r - 16, t: t || 0.8, txt});
   const odm = f => { if (f.lvOdm === undefined) f.lvOdm = ODM_MAX; return Math.floor(f.lvOdm + 1e-6); };
@@ -6851,7 +6895,7 @@ const LV = (() => {
   }
   function reset(){
     fxs.length = 0;
-    for (const f of [player, enemy]){ f.lvQ = f.lvR = null; f.lvOdm = ODM_MAX; f.lvAS = 0; f.lvSpin = 0; }
+    for (const f of fighters){ f.lvQ = f.lvR = null; f.lvOdm = ODM_MAX; f.lvAS = 0; f.lvSpin = 0; }
   }
   return {update, pose, depth, ground, top, screen, hud, icon, bot, style, reset, q, w, e, r, endQ, endR, odm, Q_RANGE, R_RANGE, W_R, E_DIST};
 })();
@@ -6949,7 +6993,7 @@ function draw(){
   }
   drawDepthPass();                                   // walls, trees and fighters, back to front
   FX3.air(); MD.top(); TJ3.top(); ZN.top(); JW.top(); NR.top();
-  for (const f of [player, enemy]){                  // Black Whip tether line
+  for (const f of fighters){                  // Black Whip tether line
     if (!f.tether || SPR3D[f.id]) continue;
     const tg = foe(f);
     if (isHidden(f, tg) && f!==player && !bots) continue;
@@ -7183,8 +7227,7 @@ function drawMinimap(){                            // small map of the whole are
     else if (o.type==='circle'){ ctx.beginPath(); ctx.arc(mx+o.x*k, my+o.y*k, Math.max(1.5, o.r*k), 0, 7); ctx.fill(); }
     else ctx.fillRect(mx+(o.x-o.w/2)*k, my+(o.y-o.h/2)*k, o.w*k, o.h*k); }
   ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(mx+camX*k, my+camY*k, VW()*k, VH()*k);
-  ctx.fillStyle = '#3aa0ff'; ctx.beginPath(); ctx.arc(mx+player.x*k, my+player.y*k, 3, 0, 7); ctx.fill();
-  if (!(isHidden(enemy, player) && !bots)){ ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(mx+enemy.x*k, my+enemy.y*k, 3, 0, 7); ctx.fill(); }
+  for (const f of fighters){ if (MP.mode !== '1v1' && f.hp <= 0) continue; if (f !== meF() && isHidden(f, meF()) && !bots) continue; ctx.fillStyle = f === meF() ? '#3aa0ff' : (f.team === 'e' ? '#ff4d4d' : teamCol(f)); ctx.beginPath(); ctx.arc(mx+f.x*k, my+f.y*k, 3, 0, 7); ctx.fill(); }
 }
 
 // ---------- LOOP ----------
@@ -7282,6 +7325,208 @@ function runDemo(dt){                               // plays the combo on the du
 let ultRefillAt = 0, training = false, trainIdx = 0, botsBeforeTrain = true, trainLog = [], trainTotal = 0, dummyLastHit = 0;
 let lastMatch = ['gojo', 'sukuna'];
 const PICK = ['gojo', 'sukuna', 'bakugo', 'midoriya', 'todoroki', 'tanjiro', 'zenitsu', 'jinwoo', 'naruto', 'sasuke', 'denji', 'reze', 'power', 'levi'];   // 1 Gojo  2 Sukuna  3 Bakugo  4 Midoriya  5 Todoroki  6 Tanjiro
+const NET_DEFAULT_RELAY = '';   // optional: put your relay address here (wss://...) so players don't have to type it
+// ---------- ONLINE MULTIPLAYER: room codes over a relay + lockstep (everyone simulates the same match, only inputs travel) ----------
+const NET = {on:false, host:false, ws:null, id:-1, me:0, mode:'ffa', players:[], F:0, D:6, sentTo:0, inbox:{}, prevIn:[], botFrom:[], lastIn:[], hist:{}, syncs:[], acc:0, stallMs:0, rng:null, code:'', cfg:null, desync:0, roster:[], status:'', relay:'', mb:{}, inGame:false, hostId:0};
+const _rand = Math.random, _pnow = performance.now.bind(performance);
+const meF = () => (NET.on && fighters[NET.me]) || player;
+const NEUTRAL = [0, 0, 0, 0, 0];
+function mulberry(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function netSend(o, to){ if (NET.ws && NET.ws.readyState === 1){ if (to !== undefined) o.to = to; NET.ws.send(JSON.stringify(o)); } }
+const netSlot = id => NET.players.findIndex(p => p.id === id);
+function netPut(f, i, a){ (NET.inbox[f] || (NET.inbox[f] = []))[i] = a; }
+function netReady(F){
+  const row = NET.inbox[F];
+  for (let i = 0; i < NET.players.length; i++){ if (NET.botFrom[i] !== undefined && F >= NET.botFrom[i]) continue; if (!row || !row[i]) return false; }
+  return true;
+}
+function netCapture(){                              // this frame's input: move, aim point (world), buttons
+  if ((typeof MENU !== 'undefined' && MENU.open) || NET.uiLock || !fighters[NET.me] || fighters[NET.me].hp <= 0) return NEUTRAL;
+  const ax = Math.round(mouse.x), ay = Math.round(mouse.y);
+  const aa = KB.aa.startsWith('Mouse') ? !!NET.mb[+KB.aa.slice(5)] : !!keys[KB.aa];
+  const btn = (keys[KB.q] ? 1 : 0) | (keys[KB.w] ? 2 : 0) | (keys[KB.e] ? 4 : 0) | (keys[KB.r] ? 8 : 0) | (keys[KB.dash] ? 16 : 0) | (aa ? 32 : 0);
+  return [(keys[KB.right] ? 1 : 0) - (keys[KB.left] ? 1 : 0), (keys[KB.down] ? 1 : 0) - (keys[KB.up] ? 1 : 0), ax, ay, btn];
+}
+function netApply(f, inp, prev, dt){                // same actions a human would take, driven by the shared input frame
+  if (f.hp <= 0) return;
+  const btn = inp[4], press = btn & ~(prev[4] | 0);
+  const stunned = f.stun > 0 || f.root > 0;
+  let dx = stunned ? 0 : inp[0], dy = stunned ? 0 : inp[1];
+  const m = Math.hypot(dx, dy) || 1; dx /= m; dy /= m;
+  f.aim = Math.atan2(inp[3] - f.y, inp[2] - f.x);
+  if ((btn & 16) && f.dashCd <= 0 && (dx || dy) && !stunned && !f.aaW){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = dx * 620; f.vy = dy * 620; }
+  if (f.dashT > 0){ f.dashT -= dt; } else { f.vx = dx * f.spd; f.vy = dy * f.spd; }
+  if (f.howT >= 0){ if (press & 32) howLaunch(f, inp[2], inp[3]); return; }
+  if (press & 1) castSkill(f, 'q', f.aim);
+  if (press & 2) castSkill(f, 'w', f.aim);
+  if (press & 4) castSkill(f, 'e', f.aim);
+  if (press & 8) castSkill(f, 'r', f.aim);
+  if ((btn & 32) && !f.aaW && !stunned && !f.fly && !f.chan){
+    const tg = aaPick(f, inp[2], inp[3], 60) || aaNearest(f);
+    if (tg){ if (inAAR(f, tg)) startAA(f, tg); else if (!dx && !dy){ const ux = tg.x - f.x, uy = tg.y - f.y, d = Math.hypot(ux, uy) || 1; f.vx = ux / d * f.spd; f.vy = uy / d * f.spd; } }
+  }
+}
+function netControl(dt){                            // replaces the keyboard / bot control section while online
+  const F = NET.F, row = NET.inbox[F] || [];
+  for (let i = 0; i < fighters.length; i++){
+    const f = fighters[i];
+    if (NET.botFrom[i] !== undefined && F >= NET.botFrom[i]){ runAI(f, realFoe(f), dt); continue; }   // left the room: a bot takes over
+    const a = row[i] || NEUTRAL; netApply(f, a, NET.prevIn[i] || NEUTRAL, dt); NET.prevIn[i] = a;
+  }
+}
+function netStep(){
+  const F = NET.F;
+  while (NET.syncs.length && NET.syncs[0].f <= F){   // host's positions and HP: nudge anyone who drifted
+    const sy = NET.syncs.shift(), mine = NET.hist[sy.f]; if (!mine) continue;
+    sy.s.forEach((h, i) => { const f = fighters[i], g = mine[i]; if (!f || !g) return;
+      const ex = h[0] - g[0], ey = h[1] - g[1];
+      if (Math.abs(ex) > 0.5 || Math.abs(ey) > 0.5 || Math.abs(h[2] - g[2]) > 0.5){ NET.desync++; f.x += ex; f.y += ey; if (f.hp > 0) f.hp = Math.min(f.max, Math.max(0.01, f.hp + (h[2] - g[2]))); } });
+  }
+  Math.random = NET.rng; performance.now = () => F * 1000 / 60;
+  try { update(1 / 60); } finally { Math.random = _rand; performance.now = _pnow; }
+  delete NET.inbox[F];
+  NET.F = F + 1;
+  NET.hist[NET.F] = fighters.map(f => [f.x, f.y, f.hp]); delete NET.hist[NET.F - 90];
+  if (NET.host && NET.F % 90 === 0) netSend({t:'sync', f:NET.F, s:NET.hist[NET.F]});
+}
+function netPump(realDt){                           // called once per browser frame: advance as many 1/60 steps as inputs allow
+  NET.acc += Math.min(realDt, 0.1);
+  let n = 0, stalled = false;
+  while (NET.acc >= 1 / 60 && n < 4){
+    while (NET.sentTo < NET.F + NET.D){ NET.sentTo++; const a = netCapture(); netPut(NET.sentTo, NET.me, a); netSend({t:'in', f:NET.sentTo, a}); }
+    if (!netReady(NET.F)){ stalled = true; break; }
+    netStep(); NET.acc -= 1 / 60; n++;
+  }
+  if (stalled){ NET.stallMs += realDt * 1000; NET.acc = Math.min(NET.acc, 0.1);
+    if (NET.host && NET.stallMs > 8000){ NET.stallMs = 0; const row = NET.inbox[NET.F] || []; NET.players.forEach((p, i) => { if (p.id !== NET.id && !row[i] && !(NET.botFrom[i] <= NET.F)) netSend({t:'kick', id:p.id}); }); } }
+  else NET.stallMs = 0;
+}
+function netBegin(cfg){                             // everyone starts the same match from the same seed
+  NET.cfg = cfg; NET.on = true; NET.inGame = true; NET.players = cfg.players; NET.mode = cfg.mode;
+  NET.me = Math.max(0, NET.players.findIndex(p => p.id === NET.id));
+  NET.D = cfg.D || 6; NET.F = 0; NET.sentTo = NET.D - 1; NET.acc = 0; NET.stallMs = 0; NET.desync = 0;
+  NET.inbox = {}; NET.hist = {}; NET.syncs = []; NET.prevIn = []; NET.botFrom = []; NET.lastIn = NET.players.map(() => NET.D - 1);
+  for (let f = 0; f < NET.D; f++) NET.inbox[f] = NET.players.map(() => NEUTRAL);
+  NET.rng = mulberry(cfg.seed);
+  training = false; bots = true; demo = null; if (cfg.map && LAYOUTS[cfg.map]) MAP = cfg.map;
+  Math.random = NET.rng;
+  try { startMulti(cfg.mode === '2v2' ? '2v2' : 'ffa', NET.players.map(p => p.char)); } finally { Math.random = _rand; }
+  fighters.forEach((f, i) => { f.tag = NET.players[i].name; });
+  NET.hist[0] = fighters.map(f => [f.x, f.y, f.hp]);
+  MENU.S.inMatch = true; MENU.hide(); NETUI.hide();
+  try { document.getElementById('netleave').style.display = 'block'; } catch (e) {}
+}
+function netReplay(){ if (!NET.on || !NET.host) return; const c = Object.assign({}, NET.cfg, {seed:(Math.random() * 4294967295) >>> 0}); netSend(Object.assign({t:'start'}, c)); netBegin(c); }
+function netPeerLeft(id){
+  if (NET.inGame){
+    const s = netSlot(id); if (s < 0 || NET.botFrom[s] !== undefined) return;
+    NET.botFrom[s] = NET.lastIn[s] + 1;
+    if (fighters[s]) fighters[s].tag = (fighters[s].tag || '') + ' (BOT)';
+  } else { NET.roster = NET.roster.filter(p => p.id !== id); if (NET.host) netRoster(); else NETUI.render(); }
+}
+function netRoster(){ netSend({t:'roster', mode:NET.mode, players:NET.roster}); NETUI.render(); }
+function netOnMsg(m){
+  switch (m.t){
+    case 'welcome': NET.id = m.id; NET.hostId = m.hostId; NET.host = (m.id === m.hostId); NET.status = 'connected';
+      if (NET.host){ NET.roster = [{id:m.id, name:NETUI.name, char:NETUI.char}]; } else netSend({t:'hello', name:NETUI.name, char:NETUI.char}, m.hostId);
+      NETUI.render(); break;
+    case 'host': NET.hostId = m.id; NET.host = (m.id === NET.id); NETUI.render(); break;
+    case 'left': netPeerLeft(m.id); break;
+    case 'err': NET.status = m.m; NETUI.render(); break;
+    case 'full': NET.status = 'room is full or already started'; NETUI.render(); break;
+    case 'hello': if (!NET.host) break;
+      if (NET.inGame || NET.roster.length >= (NET.mode === '1v1' ? 2 : 4)){ netSend({t:'full'}, m.from); netSend({t:'kick', id:m.from}); break; }
+      NET.roster = NET.roster.filter(p => p.id !== m.from).concat([{id:m.from, name:String(m.name || 'PLAYER').slice(0, 14), char:ROSTER[m.char] ? m.char : 'gojo'}]).sort((a, b) => a.id - b.id); netRoster(); break;
+    case 'pick': if (!NET.host) break; { const p = NET.roster.find(q => q.id === m.from); if (p && ROSTER[m.char]){ p.char = m.char; netRoster(); } } break;
+    case 'roster': NET.roster = m.players; NET.mode = m.mode; NETUI.render(); break;
+    case 'start': netBegin(m); break;
+    case 'in': { const s = netSlot(m.from); if (s >= 0){ netPut(m.f, s, m.a); if (m.f > NET.lastIn[s]) NET.lastIn[s] = m.f; } } break;
+    case 'sync': NET.syncs.push(m); break;
+  }
+}
+function netConnect(isHost, code){
+  NET.relay = NETUI.relay.replace(/\/+$/, ''); NET.code = code; NET.status = 'connecting...'; NET.mode = NETUI.mode;
+  try { NET.ws = new WebSocket(NET.relay + '/room/' + code + '?host=' + (isHost ? 1 : 0)); } catch (e){ NET.status = 'bad server address'; NETUI.render(); return; }
+  NET.ws.onmessage = ev => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } netOnMsg(m); };
+  NET.ws.onclose = () => { if (NET.inGame){ NET.status = 'disconnected'; const b = document.getElementById('netleave'); if (b) b.textContent = 'DISCONNECTED - TAP TO EXIT'; } else { NET.status = NET.status === 'connecting...' ? 'could not reach the server' : (NET.status || 'disconnected'); NET.ws = null; NETUI.render(); } };
+  NET.ws.onerror = () => {};
+}
+addEventListener('mousedown', e => { NET.mb[e.button] = true; });
+addEventListener('mouseup', e => { NET.mb[e.button] = false; });
+addEventListener('blur', () => { NET.mb = {}; });
+
+// ---- lobby overlay ----
+const NETUI = (() => {
+  const st = document.createElement('style');
+  st.textContent = `#netui{position:fixed;inset:0;z-index:99990;display:none;align-items:center;justify-content:center;background:rgba(4,8,20,.88);font-family:monospace;color:#dfe6ff}
+#netui .nb{width:min(620px,92vw);background:#0d1430;border:2px solid #3a4a8a;border-radius:10px;padding:20px 24px;max-height:92vh;overflow:auto}
+#netui h2{margin:0 0 12px;font-size:22px;letter-spacing:3px;color:#ffd93d}
+#netui .row{display:flex;gap:8px;align-items:center;margin:8px 0;flex-wrap:wrap}
+#netui label{font-size:11px;letter-spacing:2px;color:#8fa0d0;width:100%}
+#netui input,#netui select{background:#070c1e;color:#fff;border:1px solid #3a4a8a;border-radius:6px;padding:8px 10px;font:bold 14px monospace;flex:1;min-width:0}
+#netui button{background:#1c2a5e;color:#fff;border:1px solid #5a6ab0;border-radius:6px;padding:9px 16px;font:bold 14px monospace;cursor:pointer;letter-spacing:1px}
+#netui button:hover{background:#2c3e86}#netui button.on{background:#ffb020;color:#111;border-color:#ffb020}#netui button.go{background:#2a8a4a;border-color:#4ad07a}
+#netui button:disabled{opacity:.4;cursor:default}
+#netui .code{font-size:44px;letter-spacing:12px;color:#ffd93d;text-align:center;margin:6px 0}
+#netui .pl{display:flex;gap:10px;align-items:center;background:#070c1e;border:1px solid #2a3a7a;border-radius:6px;padding:8px 10px;margin:6px 0}
+#netui .pl b{flex:1}#netui .tm{font-size:11px;padding:2px 8px;border-radius:10px;color:#111}
+#netui .msg{min-height:18px;font-size:12px;color:#ff9a7a;margin-top:8px}
+#netleave{position:fixed;top:8px;right:8px;z-index:99980;display:none;background:rgba(0,0,0,.6);color:#fff;border:1px solid #888;border-radius:6px;padding:5px 10px;font:bold 11px monospace;cursor:pointer}`;
+  document.head.appendChild(st);
+  const el = document.createElement('div'); el.id = 'netui'; document.body.appendChild(el);
+  const lb = document.createElement('button'); lb.id = 'netleave'; lb.textContent = 'LEAVE ROOM'; document.body.appendChild(lb);
+  lb.onclick = () => { if (NET.ws) try { NET.ws.close(); } catch (e) {} location.reload(); };
+  const U = {name:'', char:'gojo', mode:'ffa', relay:'', code:''};
+  try { const j = JSON.parse(localStorage.getItem('aa_net') || '{}'); U.relay = j.relay || ''; U.name = j.name || ''; U.char = ROSTER[j.char] ? j.char : 'gojo'; } catch (e) {}
+  if (!U.relay) U.relay = (typeof NET_DEFAULT_RELAY === 'string') ? NET_DEFAULT_RELAY : '';
+  if (!U.name) U.name = (PROF.alias || 'PLAYER').toUpperCase().slice(0, 14);
+  const save = () => { try { localStorage.setItem('aa_net', JSON.stringify({relay:U.relay, name:U.name, char:U.char})); } catch (e) {} };
+  const opts = sel => PICK.map(id => `<option value="${id}" ${id === sel ? 'selected' : ''}>${ROSTER[id].name.toUpperCase()}</option>`).join('');
+  const need = () => NET.mode === '1v1' ? [2, 2] : NET.mode === '2v2' ? [4, 4] : [2, 4];
+  const team = i => NET.mode === '2v2' ? (i % 2 === 0 ? ['TEAM A', '#3da5ff'] : ['TEAM B', '#ff4040']) : [NET.mode === '1v1' ? 'DUEL' : 'FREE FOR ALL', '#ffd93d'];
+  function render(){
+    if (el.style.display === 'none') return;
+    let h = '<div class="nb"><h2>ONLINE</h2>';
+    if (!NET.ws){
+      h += `<div class="row"><label>RELAY SERVER</label><input id="nrelay" value="${U.relay}" placeholder="wss://your-relay.workers.dev" spellcheck="false"></div>
+        <div class="row"><label>YOUR NAME / FIGHTER</label><input id="nname" maxlength="14" value="${U.name}"><select id="nchar">${opts(U.char)}</select></div>
+        <div class="row"><label>HOST A ROOM - PICK THE MODE FIRST</label>${[['1v1', '1V1'], ['ffa', 'FREE FOR ALL'], ['2v2', '2V2']].map(([v, l]) => `<button data-m="${v}" class="${U.mode === v ? 'on' : ''}">${l}</button>`).join('')}<button class="go" data-a="host">HOST</button></div>
+        <div class="row"><label>OR JOIN WITH A CODE</label><input id="ncode" maxlength="4" value="${U.code}" placeholder="CODE" style="text-transform:uppercase;letter-spacing:6px"><button class="go" data-a="join">JOIN</button></div>`;
+    } else {
+      const r = NET.roster, n = need(), ok = r.length >= n[0] && r.length <= n[1];
+      h += `<div class="code">${NET.code}</div><div class="row" style="justify-content:center"><label style="text-align:center">${NET.mode === '1v1' ? '1V1' : NET.mode === '2v2' ? '2V2' : 'FREE FOR ALL'} - SHARE THIS CODE</label></div>`;
+      r.forEach((p, i) => { const t = team(i); h += `<div class="pl"><span class="tm" style="background:${t[1]}">${t[0]}</span><b>${p.name}${p.id === NET.hostId ? ' (HOST)' : ''}${p.id === NET.id ? ' (YOU)' : ''}</b>${p.id === NET.id ? `<select id="nchar2">${opts(p.char)}</select>` : `<span>${ROSTER[p.char] ? ROSTER[p.char].name.toUpperCase() : ''}</span>`}</div>`; });
+      h += `<div class="row" style="margin-top:12px">${NET.host ? `<button class="go" data-a="start" ${ok ? '' : 'disabled'}>START (${r.length}/${n[1]}${n[0] !== n[1] ? ', MIN ' + n[0] : ''})</button>` : '<span>WAITING FOR THE HOST TO START...</span>'}<button data-a="leave">LEAVE</button></div>`;
+    }
+    h += `<div class="msg">${NET.status && NET.status !== 'connected' ? NET.status : ''}</div><div class="row"><button data-a="close">CLOSE</button></div></div>`;
+    el.innerHTML = h;
+  }
+  el.addEventListener('input', e => { const t = e.target;
+    if (t.id === 'nrelay'){ U.relay = t.value.trim(); save(); } else if (t.id === 'nname'){ U.name = t.value.toUpperCase().slice(0, 14); save(); } else if (t.id === 'ncode'){ U.code = t.value.toUpperCase().replace(/[^A-Z]/g, ''); t.value = U.code; } });
+  el.addEventListener('change', e => { const t = e.target;
+    if (t.id === 'nchar'){ U.char = t.value; save(); }
+    else if (t.id === 'nchar2'){ U.char = t.value; save(); if (NET.host){ const p = NET.roster.find(q => q.id === NET.id); if (p){ p.char = U.char; netRoster(); } } else netSend({t:'pick', char:U.char}, NET.hostId); } });
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; e.stopPropagation();
+    if (b.dataset.m){ U.mode = b.dataset.m; return render(); }
+    const a = b.dataset.a;
+    if (a === 'close'){ hide(); }
+    else if (a === 'host' || a === 'join'){
+      if (!/^wss?:\/\//.test(U.relay)){ NET.status = 'enter the relay server address (wss://...)'; return render(); }
+      if (a === 'host'){ const L = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let c = ''; for (let i = 0; i < 4; i++) c += L[Math.floor(_rand() * L.length)]; NET.mode = U.mode; NETUI.mode = U.mode; netConnect(true, c); }
+      else { if (U.code.length !== 4){ NET.status = 'type the 4 letter code'; return render(); } netConnect(false, U.code); }
+      render();
+    }
+    else if (a === 'leave'){ if (NET.ws) try { NET.ws.close(); } catch (e) {} NET.ws = null; NET.roster = []; NET.host = false; NET.status = ''; render(); }
+    else if (a === 'start' && NET.host){
+      const cfg = {mode:NET.mode, seed:(_rand() * 4294967295) >>> 0, D:6, map:MAP, players:NET.roster.slice()};
+      netSend(Object.assign({t:'start'}, cfg)); netBegin(cfg);
+    }
+  });
+  function open(){ el.style.display = 'flex'; U.name = U.name || 'PLAYER'; render(); }
+  function hide(){ el.style.display = 'none'; }
+  return {open, hide, render, get name(){ return U.name; }, get char(){ return U.char; }, get relay(){ return U.relay; }, get mode(){ return U.mode; }, set mode(v){ U.mode = v; }};
+})();
+
 let pickFirst = null, pickAt = 0;
 function startTraining(i){
   if (!training){ botsBeforeTrain = bots; lastMatch = [matchP, matchE]; }
@@ -7292,8 +7537,20 @@ function startTraining(i){
   if (player.id==='zenitsu') player.ch.q = ZQ_MAXCH;   // tester range: full charges
   enemy.x = W/2 + 160;
 }
+function startMulti(mode, ids){                   // mode 'ffa' (2-4) or '2v2' (4); ids = one character per slot, slot 0 is you
+  ids = ids.slice(0, 4); const n = ids.length;
+  startMatch(ids[0], ids[1]);
+  MP.mode = mode;
+  const T = mode === '2v2' ? ['p','e','p','e'] : ['p','e','f2','f3'];
+  const s0 = spawnPt(0), s1 = spawnPt(1), dy = 110, cy = Math.min(260, H/2 - 70);
+  const P = mode === '2v2' ? [[s0[0], s0[1]-dy], [s1[0], s1[1]-dy], [s0[0], s0[1]+dy], [s1[0], s1[1]+dy]] : [s0, s1, [W/2, H/2-cy], [W/2, H/2+cy]];
+  player.x = P[0][0]; player.y = P[0][1]; enemy.x = P[1][0]; enemy.y = P[1][1];
+  for (let i = 2; i < n; i++) fighters.push(makeFighter(ids[i], P[i][0], P[i][1], T[i]));
+  JW.reset(); NR.reset(); SD.reset(); DJ.reset(); RZ.reset(); PW.reset(); LV.reset();
+  for (const f of fighters){ pushOut(f); pushOut(f); }
+}
 function startMatch(p, e){
-  matchP = p; matchE = e;
+  matchP = p; matchE = e; fighters.length = 2; MP.mode = '1v1'; MP.feed = [];
   for (const k in player) delete player[k];          // clear leftover state from the last match
   for (const k in enemy) delete enemy[k];
   OBST = makeObstacles();
@@ -8093,7 +8350,7 @@ const MENU = (() => {
       <div class="btns">
         ${S.inMatch ? `<button class="big resume" data-act="resume"><b>RESUME</b></button>` : ''}
         <button class="big" data-go="pve"><b>PLAY VS BOT</b></button>
-        <button class="big" data-go="pvp"><b>ONLINE 1v1</b></button>
+        <button class="big" data-go="pvp"><b>ONLINE</b></button>
         <button class="big alt" data-go="train"><b>TRAINING</b></button>
         <button class="big view" data-go="view"><b>CHARACTERS</b></button>
       </div>
@@ -8253,7 +8510,7 @@ const MENU = (() => {
       if (A && A.img && A.img.complete && A.img.naturalWidth) c.drawImage(A.img, (Math.floor(fr) % A.n) * SP.FW, 0, SP.FW, SP.FH, 0, 0, 44, 72);
     }
   }
-  function go(scr){ S.bind = null; S.screen = scr; S.slot = 'you'; S.step = MODES[scr] ? MODES[scr][0] : ''; if (scr === 'view' || (MODES[scr] && S.step === 'you')) setV(S.you); S.open = true; paint(); }
+  function go(scr){ if (scr === 'pvp'){ NETUI.open(); return; } S.bind = null; S.screen = scr; S.slot = 'you'; S.step = MODES[scr] ? MODES[scr][0] : ''; if (scr === 'view' || (MODES[scr] && S.step === 'you')) setV(S.you); S.open = true; paint(); }
   const cvEl = document.getElementById('c'); let lastUnlock = -1e9;
   const fit = () => { SH = 540; SW = Math.max(720, Math.min(1400, Math.round(540 * innerWidth / innerHeight))); if (cvEl.width !== SW || cvEl.height !== SH){ cvEl.width = SW; cvEl.height = SH; } REPLAY.x = SW / 2 - 90; REPLAY.y = SH / 2 + 30;
     const s = Math.min(innerWidth / SW, innerHeight / SH); document.documentElement.style.setProperty('--s', Math.min(innerWidth / 960, innerHeight / 540)); const cc = Math.max(innerWidth / 960, innerHeight / 540), rs = document.documentElement.style; rs.setProperty('--c', cc); rs.setProperty('--cx', innerWidth / 2 + 'px'); rs.setProperty('--cy', (innerHeight / 2 + 144 * cc) + 'px'); cvEl.style.width = SW * s + 'px'; cvEl.style.height = SH * s + 'px'; };   // the game fills the window (16:9, centred)
@@ -8319,9 +8576,9 @@ const MENU = (() => {
 let last = performance.now();
 (function loop(now){
   const dt = Math.min(0.05, (now-last)/1000); last = now;
-  if (player.hp>0 && enemy.hp>0){ if (!MENU.paused) update(dt); }
+  if (aliveTeams() >= 2){ if (NET.on) netPump(dt); else if (!MENU.paused) update(dt); }
   else {                                            // match over: tally the win, then wait for the REPLAY click
-    if (!ended){ ended = true; const w = player.hp>0 ? player.id : enemy.id; wins[w] = (wins[w]||0) + 1; if (typeof AUD !== 'undefined' && !MENU.open && !training && !bots) { AUD.sfx(player.hp>0 ? 'win' : 'lose'); AUD.voice(player.id, player.hp>0 ? 'win' : 'lose', {delay:450, ch:'p'}); } }
+    if (!ended){ ended = true; const w = (fighters.find(f => f.hp>0) || enemy).id; wins[w] = (wins[w]||0) + 1; if (typeof AUD !== 'undefined' && !MENU.open && !training && !bots) { AUD.sfx(iWon() ? 'win' : 'lose'); AUD.voice(player.id, iWon() ? 'win' : 'lose', {delay:450, ch:'p'}); } }
   }
   draw();
   requestAnimationFrame(loop);
