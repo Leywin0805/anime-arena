@@ -1589,6 +1589,7 @@ function doAutoNow(f){                            // swing + set the auto cooldo
     if (f.aaChain===1){ f.aaChain = 0; f.atkCd = autoCd(f); }          // 2nd swing: full reset
     else { f.aaChain = 1; f.aaChainT = MIDO_CHAIN + 0.6; f.atkCd = 0.12; }    // 1st swing: 2nd ready almost at once
   } else f.atkCd = autoCd(f);
+  if (f.id==='reze' && f.rzHeadJ){ f.rzHeadJ = false; f.atkCd = Math.max(f.atkCd, 5); }   // Reze: 5 s lockout after the head shot
 }
 // ---------- LEAGUE-STYLE AIMING: auto attack windup (0.8s, rooted, guaranteed hit) + hold-to-aim / release-to-cast ----------
 var AA_FORCE = false, AA_NOANIM = false, AA_FIT = 0;
@@ -1945,12 +1946,12 @@ function shoot(f, ang){
 }
 // ---------- ULT CHARGE: starts at 0. Steady passive charge for both; losing the fight charges faster; damage taken charges fast.
 // Nothing charges while the ult is ready (full) or active, so the next one only builds after the last was used.
-const ULT_BASE = 0.7, ULT_CATCH = 1.5, ULT_TAKEN = 1.2, ULT_DEALT = 0.3;
+const ULT_BASE = 0.7, ULT_CATCH = 1.5, ULT_TAKEN = 1.2, ULT_DEALT = 0.3, DJ_ULT = 1.1;   // DJ_ULT: Denji's ult charges 10% faster
 const ultBusy = f => !!(f.hino || f.ofaT>0 || f.howT>=0 || f.fly || f.sdR || f.pwR);
 function ultTick(f, dt){
   if (training || f.hp<=0 || f.ult>=100 || ultBusy(f)) return;
   const o = foe(f), behind = Math.max(0, Math.min(1, o.hp/o.max - f.hp/f.max));   // how far behind in HP
-  f.ult = Math.min(100, f.ult + ULT_BASE*(1 + ULT_CATCH*behind)*dt);
+  f.ult = Math.min(100, f.ult + ULT_BASE*(1 + ULT_CATCH*behind)*dt*(f.id==='denji' ? DJ_ULT : 1));
 }
 function hit(f, dmg, src, kx, ky){
   if (f.inv > 0 || f.hp <= 0) return;
@@ -1986,8 +1987,8 @@ function hit(f, dmg, src, kx, ky){
     const now = performance.now(); trainLog.push({t:now, d:dmg}); trainTotal += dmg; dummyLastHit = now;
     if (f.hp < 1) f.hp = 1;
   }
-  if (!f.__sh && !ultBusy(f)) f.ult = Math.min(100, f.ult + dmg*ULT_TAKEN);                          // taking damage charges the ult fast
-  if (src && src!==f && !ultBusy(src)) src.ult = Math.min(100, src.ult + dmg*ULT_DEALT);   // dealing damage charges it a little
+  if (!f.__sh && !ultBusy(f)) f.ult = Math.min(100, f.ult + dmg*ULT_TAKEN*(f.id==='denji' ? DJ_ULT : 1));                          // taking damage charges the ult fast
+  if (src && src!==f && !ultBusy(src)) src.ult = Math.min(100, src.ult + dmg*ULT_DEALT*(src.id==='denji' ? DJ_ULT : 1));   // dealing damage charges it a little
   if (dmg>0 && !HIT_TICK){ if (f.id==='power' && !f.__sh) PW.taken(f, dmg); if (src && src.id==='power' && src!==f) PW.dealt(src, dmg); }   // Blood Rush
   if (kx) { f.kx += kx; f.ky += ky; }
   if (dmg>0 && !f.__sh) fx.push({x:f.x, y:f.y-f.r, t:0.5, txt:'-'+(Math.round(dmg*10)/10)});
@@ -2002,7 +2003,7 @@ const foe = f => { if (AA_OV && AA_OV.f===f) return AA_OV.t; const t = f.team===
 // ---------- SHRINE WALL (16 segments, 3 hp each; a break only opens that segment) ----------
 const BLINK_R = 100;                              // Sukuna W teleport distance
 const BLAST_HALF = 75*Math.PI/180, BLAST_HALF_WIDE = 100*Math.PI/180, BLAST_REACH = 76, BLAST_LOCK = 62;   // Bakugo empowered auto: 90 degree cone, +20 reach
-const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 2.5, CLEAVE_REACH = 32;   // empowered Cleave auto: 200 degree cone
+const SEG = 16, CLEAVE_HALF = 100*Math.PI/180, CLEAVE_BONUS = 3.0, CLEAVE_REACH = 32;   // empowered Cleave auto: 200 degree cone
 function segIdx(z, x, y){ let a = Math.atan2(y-z.y, x-z.x); if (a<0) a += Math.PI*2; return Math.floor(a/(Math.PI*2)*SEG) % SEG; }
 function hitWall(z, x, y, dmg){
   const i = segIdx(z, x, y);
@@ -2180,9 +2181,9 @@ const SKILLS = {
   },
   naruto: {
     // Passive Kurama's Chakra: below 15% HP (once per match) speed boost and heal to 30%. Q Rasenshuriken | W Shadow Clone Jutsu | E Summoning Jutsu | R Kurama Mode
-    q:{name:'Rasenshuriken', hud:'Rasen', cd:5, est:10, chan:0.2, cast(f,a){ NR.q(f, a); }},
-    w:{name:'Shadow Clone Jutsu', hud:'Clones', cd:18, est:0, chan:0, cast(f,a){ NR.w(f); }},
-    e:{name:'Summoning Jutsu', hud:'Summon', cd:9, est:9, chan:0.2, cast(f,a){ NR.e(f, a); }},
+    q:{name:'Rasenshuriken', hud:'Rasen', cd:4, est:10, chan:0.2, cast(f,a){ NR.q(f, a); }},
+    w:{name:'Shadow Clone Jutsu', hud:'Clones', cd:16, est:0, chan:0, cast(f,a){ NR.w(f); }},
+    e:{name:'Summoning Jutsu', hud:'Summon', cd:8, est:9, chan:0.2, cast(f,a){ NR.e(f, a); }},
     r:{name:'Kurama Mode', hud:'Kurama', chan:0.6, cast(f,a){ NR.r(f); }}
   },
   jinwoo: {
@@ -2329,7 +2330,7 @@ const SKILLS = {
       timers.push({t:0.2, fn(){
         if (f.hp<=0) return;
         for (const clock of [-Math.PI/2, Math.PI/6, Math.PI*5/6]){   // 12, 4 and 8 o'clock around him
-          proj(f, clock, {spd:220, r:12, dmg:5, life:3, home:2.4, homeDelay:0.6, color:'#ff8c1a'});   // fly outward first, then home
+          proj(f, clock, {spd:255, r:12, dmg:5, life:3, home:2.4, homeDelay:0.6, color:'#ff8c1a'});   // fly outward first, then home
           const b = bullets[bullets.length-1];
           b.x = f.x + Math.cos(clock)*46; b.y = f.y + Math.sin(clock)*46;
         }
@@ -2482,7 +2483,7 @@ function updateZenitsu(f, dt){
   if (f.fleeCd>0) f.fleeCd -= dt;
   if (f.zChain>0) f.zChain -= dt;
   if (f.e2>0){ f.e2 -= dt; if (f.e2<=0) f.cd.e = SKILLS.zenitsu.e.cd; }   // missed part 2: cooldown starts
-  if (f.zHold>0){ if (f.stun>0 || f.silT>0 || f.chan) f.zHold = 0; else f.zHold = Math.min(1, f.zHold + dt); }   // Q charging
+  if (f.zHold>0){ if (f.stun>0 || f.silT>0 || f.chan) f.zHold = 0; else f.zHold = Math.min(1, f.zHold + dt * zRate(f)); }   // Q charging
 }
 function zenQInput(f){                             // player: hold Q to charge, release to dash
   if (keys[KB.q]){ if (!(f.zHold>0) && chg(f,'q')>0 && f.stun<=0 && !f.lunge && !f.chan && !(f.silT>0)) f.zHold = 0.0001; }
@@ -3173,6 +3174,10 @@ function styleOf0(f, o){                            // Bakugo: keeps distance un
   if (f.id==='bakugo') return f.phase==='burst' ? {range:55, strafe:40} : {range:220, strafe:80};
   return STYLE[f.id] || {range:55, strafe:60};
 }
+const BK_STUN = {gojo:['e','q'], todoroki:['q'], bakugo:['q'], midoriya:['q'], reze:['w'], naruto:['e'], zenitsu:['w'], power:['e'], sukuna:['q'], tanjiro:['q'], sasuke:['w']};
+const enemyStunUp = o => (BK_STUN[o.id] || []).some(k => SKILLS[o.id] && SKILLS[o.id][k] && skillUp(o, k));
+const BAKU_COMBO_HARD = ['e','q','w','e','a','e','a'];   // dash in, Q stun first, AP shot while they are stuck, then Blast / empowered auto twice
+const bakuCombo = f => botTier(f) === 'hard' ? BAKU_COMBO_HARD : BAKU_COMBO;
 function bakugoPhase(f, o, dist, dt){              // poke (chip at range) -> burst (opening) -> retreat (make space)
   if (f.id!=='bakugo') return;
   f.phase = f.phase || 'poke'; f.phaseT = (f.phaseT||0) + dt;
@@ -3183,9 +3188,10 @@ function bakugoPhase(f, o, dist, dt){              // poke (chip at range) -> bu
     const gojoWait = o.id==='gojo' && !gojoGuardDown(o) && !(o.stun>0);   // vs Gojo: bait Blue / Infinity first
     if (gojoWait){}
     else if (!walled && dist<320 && chg(f,'e')>=3) go('burst');                              // wants to dive: all 3 Blasts up
+    else if (botTier(f)==='hard'){ if (opening && !enemyStunUp(o) && dist<360 && chg(f,'e')>=2) go('burst'); }   // Hard: commit on any opening with 2+ Blasts, unless they still have a stun
     else if (opening && dist<360 && chg(f,'e')>=2 && (f.cd.q<=0 || o.stun>0)) go('burst');   // or an opening
   } else if (f.phase==='burst'){
-    if ((f.cs||0) >= BAKU_COMBO.length || f.phaseT>5) go('retreat');                   // combo done: back off
+    if ((f.cs||0) >= bakuCombo(f).length || f.phaseT>5) go('retreat');                   // combo done: back off
   } else if (f.phase==='retreat'){
     if ((dist>240 && f.phaseT>0.6) || f.phaseT>2.5) go('poke');
   }
@@ -3194,7 +3200,7 @@ function bakugoPhase(f, o, dist, dt){              // poke (chip at range) -> bu
 const BAKU_COMBO = ['e','a','w','e','a','q','e','a','w'];
 function bakugoBurst(f, o, dist, ea, dt){
   if (f.id!=='bakugo' || f.phase!=='burst' || f.stun>0 || f.root>0) return;
-  const step = BAKU_COMBO[f.cs||0]; if (!step) return;            // combo finished
+  const step = bakuCombo(f)[f.cs||0]; if (!step) return;            // combo finished
   const next = () => { f.cs = (f.cs||0) + 1; f.csT = 0; };
   f.csT = (f.csT||0) + dt;
   if (f.csT > 1.2){ next(); return; }                               // step couldn't happen in time: skip it
@@ -3227,6 +3233,30 @@ function punishStun(f, o, dist, ea, dt){
   else if (dist <= reach){ f.vx = f.vy = 0; }
   if (dist < (f.id==='todoroki' ? TODO_CONE_R + o.r : MELEE_R + o.r) && f.atkCd<=0) doAuto(f);  // and auto
   return false;                                      // the rest of the bot logic (dodging, combos) still runs
+}
+const ZN_P = {normal:{e:0.55, q:0.7, stun:0.3, rate:1.25}, hard:{e:0.8, q:0.9, stun:0.6, rate:1.5}};
+const zRate = f => ((f === player && !bots) ? 1 : ((ZN_P[botTier(f)] || {rate:1}).rate));
+// Normal/Hard Zenitsu vs Zenitsu: spacing decides it. Dodge his E as he steps into range, stun him mid-charge, sidestep his Q
+function ZNB(f, o, dist, ea){
+  const P = ZN_P[botTier(f)];
+  if (!P || o.id !== 'zenitsu' || f.stun > 0 || f.root > 0 || f.chan || f.lunge || f.dashT > 0) return false;
+  const away = a => { f.vx = Math.cos(a) * f.spd; f.vy = Math.sin(a) * f.spd; };
+  const dsh = a => { if (f.dashCd <= 0 && f.dashT <= 0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(a) * 620; f.vy = Math.sin(a) * 620; return true; } return false; };
+  const eReady = o.cd.e <= 0 || o.e2 > 0;
+  if (f.cd.e <= 0 && dist < ZE_LEN - 35 && dist > 80 && (!eReady || Math.random() < 0.5) && castSkill(f, 'e', ea)) return true;   // first strike (or his E is down): I stun him
+  if (f.cd.e <= 0 && chg(f,'q') >= ZE_COST && dist > ZE_LEN - 35 && dist < ZE_LEN + 110 && Math.random() < (P.rate > 1.3 ? 0.03 : 0.008) && dsh(ea)) return true;   // break the standoff: Space in, then Sixfold
+  if (eReady && dist < ZE_LEN + 10 && dist > ZE_LEN - 90){        // he just got into Sixfold range: step back out
+    if (!f.znE){ f.znE = true; if (Math.random() < P.e){ if (!dsh(ea + Math.PI)) away(ea + Math.PI); return true; } }
+  } else if (dist > ZE_LEN + 60 || !eReady) f.znE = false;
+  if (o.zHold > 0){                                              // he is charging Q: a stun cancels it
+    if (!f.znS){ f.znS = true; if (f.cd.e <= 0 && dist < ZE_LEN - 30 && dist > 50 && Math.random() < P.stun && castSkill(f, 'e', ea)) return true; }
+    const need = Math.max(0, Math.min(1, (dist + 80 - ZQ_MIN) / (ZQ_MAX - ZQ_MIN)));
+    if ((o.zHold >= need - 0.15) && !f.znQ){ f.znQ = true; f.zRolled = true;
+      if (Math.random() < P.q){ const sa = ea + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2; if (!dsh(sa)) away(sa); return true; } }
+  } else if (o.lunge && o.lunge.ghost && dist < 260 && !f.znQ){ f.znQ = true; f.zRolled = true;
+    if (Math.random() < P.q){ const sa = ea + (Math.random() < 0.5 ? 1 : -1) * Math.PI / 2; if (!dsh(sa)) away(sa); return true; }
+  } else if (!o.lunge){ f.znS = false; f.znQ = false; }
+  return false;
 }
 function runAI(f, o, dt){
   if (f.hp<=0 || o.hp<=0) return;
@@ -3353,6 +3383,10 @@ function runAI(f, o, dt){
       }
     }
   }
+  if (f.id==='denji' && botTier(f)==='hard' && DJ.hard(f, o, dist, ea, dt)) return;
+  if (f.id==='zenitsu' && ZNB(f, o, dist, ea)) return;
+  if (f.id==='naruto' && botTier(f)==='hard' && NR.hard(f, o, dist, ea)) return;
+  if (f.id==='jinwoo' && botTier(f)==='hard' && JW.hard(f, o, dist, ea)) return;   // Hard Denji mirror play
   if (MATCH.reflex(f, o, dist, ea, dt)) return;      // matchup counters and hazards
   if (punishStun(f, o, dist, ea, dt)) return;        // they're stunned: follow it up
   if (f.atkCd<=0 && f.stun<=0 && f.root<=0 && (f.id==='todoroki' ? (dist < TODO_CONE_R + o.r - 4 && !segBlocked(f, o) && (!diver(o) || dist < 130)) : dist < MELEE_R + (f.cleaveT>0 ? CLEAVE_REACH : 0))){ doAuto(f); }
@@ -3602,7 +3636,7 @@ function update(dt){
     }
     if (z.kind==='shrine'){
       const tg = foe(z.src), sx = tg.x-z.x, sy = tg.y-z.y, d = Math.hypot(sx,sy) || 1;
-      if (tg.hp>0 && d < z.r && z.tick<=0){ hit(tg, 1.25, z.src); z.tick = 0.25; }   // continuous damage
+      if (tg.hp>0 && d < z.r && z.tick<=0){ hit(tg, 1.4, z.src); z.tick = 0.25; }   // continuous damage
       if (z.trapped && tg.hp>0){                     // inside: unbroken segments hold, only a breach lets him out
         const lim = z.r - tg.r;
         if (d > lim){
@@ -5151,13 +5185,25 @@ const JW = (() => {
     if (f.hp < f.max * 0.45) return {range: 340, strafe: 150};
     return n >= 2 ? {range: 300, strafe: 140} : {range: 150, strafe: 100};
   }
-  function pickArise(o){                      // melee divers get the Igris guard, ranged enemies get Beru; Iron when he is hurt
+  const IRON_VS = ['zenitsu', 'bakugo', 'midoriya', 'denji'];   // aggressive / low-cooldown: Iron's crowd control wins
+  function pickArise(o, f){                   // melee divers get the Igris guard, ranged enemies get Beru; Iron when he is hurt
+    if (f && botTier(f) === 'hard'){ if (o.id === 'jinwoo') return 'e'; if (IRON_VS.includes(o.id)) return 'q'; }   // Hard: Beru vs Jin-Woo, Iron vs aggressive kits
     const melee = (STYLE[o.id] || {range: 55}).range < 150;
     return melee ? 'w' : 'e';
   }
+  function hard(f, o, dist, ea){              // Hard only: barrier the enemy mark, W when the enemy Jin-Woo closes, stay near Iron
+    if (f.stun > 0 || f.root > 0 || f.chan || f.hp <= 0) return false;
+    if (o.id === 'jinwoo'){
+      if (f.jwMark > 0 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return true;                 // his E mark landed: Q negates the hit
+      if (dist < 170 && f.cd.w <= 0 && castSkill(f, 'w', ea)) return true;                   // he got close: W
+    }
+    const ir = mine(f).find(s => s.id === 'iron');
+    if (ir && dist > 210){ const d = Math.hypot(ir.x - f.x, ir.y - f.y); if (d > 130){ const a = Math.atan2(ir.y - f.y, ir.x - f.x); f.vx = Math.cos(a) * f.spd; f.vy = Math.sin(a) * f.spd; return true; } }   // slow Iron carries the crowd control: stick to him
+    return false;
+  }
   function bot(f, o, dist, ea){
     const n = mine(f).length, danger = dist < 120 || (f.hp < f.max * 0.5 && dist < 230);
-    if (f.ult >= 100 && dist < 460){ f.last = f.hp < f.max * 0.4 ? 'q' : pickArise(o); if (castSkill(f, 'r', ea)) return; }   // shadows up as fast as possible
+    if (f.ult >= 100 && dist < 460){ f.last = f.hp < f.max * 0.4 ? 'q' : pickArise(o, f); if (castSkill(f, 'r', ea)) return; }   // shadows up as fast as possible
     if (danger && castSkill(f, 'w', ea)) return;                                                                          // escape: untargetable, soldiers heal and dash in
     if (dist < 130 && f.dashCd <= 0 && f.stun <= 0 && f.root <= 0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = -Math.cos(ea) * 620; f.vy = -Math.sin(ea) * 620; return; }   // dash away to keep mid range
     if (n > 0 && dist < 480 && chg(f, 'e') > 0 && f.hp >= f.max * 0.5 && castSkill(f, 'e', ea)) return;                   // healthy: mark first, soldiers pile on
@@ -5199,7 +5245,7 @@ const JW = (() => {
   }
   function hurtProxy(p, dmg, src){ const s = p.__sh; if (!s || s.dis) return; if (!(s.f.jwBar > 0)) hurtSol(s, dmg, null); }
   function reset(){ sol.length = 0; slashes.length = 0; craters.length = 0; }
-  return {sol, proxyOf, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, style, target, hurtProxy, reset, mark, AURA_R};
+  return {sol, proxyOf, q, w, dagger, r, update, pose, depth, ground, top, hud, bot, hard, style, target, hurtProxy, reset, mark, AURA_R};
 })();
 
 // ---------- shared ground smash mark (Iron, Kurama slam, Toad landing): dented centre + tangled spiral cracks with thin side branches ----------
@@ -5227,7 +5273,7 @@ function smashCrack(x, y, R){
 // ---------- NARUTO: passive Kurama's Chakra (below 15% once per match: speed + heal to 30%). Q Rasenshuriken | W Shadow Clone Jutsu | E Summoning Jutsu | R Kurama Mode (giant fox form) ----------
 const NR = (() => {
   const RQ = 300, RE = 185, CL_R = 170, W_T = 2, Q_SPD = 230, Q_R = 60, Q_DMG = 10, E_DMG = 9, E_R = 95, E_DELAY = 0.6, SLOW_T = 2.5;
-  const R_T = 8, SH_MAX = 60, R_CONTACT = 3, R_TICK = 0.5, R_REACH = 28, SLAM_R = 70, SLAM_DMG = 8, SLAM_HEAL = 4, KS = 0.8, DASH_BOOST = 0.43;
+  const R_T = 8, SH_MAX = 60, R_CONTACT = 3.6, R_TICK = 0.5, R_REACH = 28, SLAM_R = 70, SLAM_DMG = 9.6, SLAM_HEAL = 4, KS = 0.8, DASH_BOOST = 0.43;
   const TOAD_SP = 0.6, GAIT_DASH = 2.52, GAIT_WALK = 0.84, E_CORE = 45;   // wolf gait +20% speed; toad core stuns
   const PASS_AT = 0.15, PASS_HEAL = 0.30, PASS_SPD = 1.3, PASS_T = 5;
   const has = typeof document !== 'undefined' && !!document.createElement;
@@ -5300,7 +5346,7 @@ const NR = (() => {
     const tg = foe(f); bursts.push({x: f.x, y: f.y, t: 0, slam: true}); damageArea(f.x, f.y, SLAM_R, 8);
     smashCrack(f.x, f.y, SLAM_R * 1.2);   // marks the whole area the smash can hurt
     try { play3(f, 'dash', f.aim, {dur: 0.3}); } catch (_) {}
-    if (tg && tg.hp > 0){ const d = Math.hypot(tg.x - f.x, tg.y - f.y); if (d < SLAM_R + tg.r){ hit(tg, SLAM_DMG, f, (tg.x - f.x) / (d || 1) * 420, (tg.y - f.y) / (d || 1) * 420); f.hp = Math.min(f.max, f.hp + SLAM_HEAL); fx.push({x: f.x, y: f.y - 60, t: 0.7, txt: '+' + SLAM_HEAL}); } }
+    if (tg && tg.hp > 0){ const d = Math.hypot(tg.x - f.x, tg.y - f.y); if (d < SLAM_R + tg.r){ hit(tg, SLAM_DMG, f, (tg.x - f.x) / (d || 1) * 600, (tg.y - f.y) / (d || 1) * 600); f.hp = Math.min(f.max, f.hp + SLAM_HEAL); fx.push({x: f.x, y: f.y - 60, t: 0.7, txt: '+' + SLAM_HEAL}); } }
   }
   // ---- passive: Kurama's Chakra ----
   function afterHit(f, hp0){
@@ -5327,7 +5373,7 @@ const NR = (() => {
         f.nrR -= dt; if (f.nrR <= 0){ endForm(f); continue; }
         if (f.dashCd > 0) f.dashCd = Math.max(0, f.dashCd - dt * DASH_BOOST);
         f.nrTick -= dt; const tg = foe(f);
-        if (f.nrTick <= 0){ f.nrTick = R_TICK; if (tg && tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < R_REACH + tg.r) hit(tg, R_CONTACT, f, (tg.x - f.x) * 3, (tg.y - f.y) * 3); }
+        if (f.nrTick <= 0){ f.nrTick = R_TICK; if (tg && tg.hp > 0 && Math.hypot(tg.x - f.x, tg.y - f.y) < R_REACH + tg.r) hit(tg, R_CONTACT, f, (tg.x - f.x) * 7, (tg.y - f.y) * 7); }
         for (const o of OBST) if (o.breakable && inObst(o, f.x, f.y, 38)) damageObst(o, 999);
       }
     }
@@ -5433,9 +5479,16 @@ const NR = (() => {
     if (f.cd.q <= 0 && dist < RQ + 30 && castSkill(f, 'q', ea)) return;
     if (f.cd.e <= 0 && dist < RE + E_R - 10 && (!MATCH.know(f, 'trap', 'adv', 2) || stuckOf(o) || waitedFor(f, 'e', 1.5)) && castSkill(f, 'e', ea)) return;   // toad lands 0.6s later: wait for a target that cannot step out
   }
+  function hard(f, o, dist, ea){               // Hard vs Naruto: run when his clones go out, stun him with the toad as he closes, Rasenshuriken the stun
+    if (o.id !== 'naruto' || f.nrR > 0 || o.nrR > 0 || f.stun > 0 || f.root > 0 || f.chan || f.dashT > 0) return false;
+    if (o.stun > 0.15 && f.cd.q <= 0 && dist < RQ + 30 && castSkill(f, 'q', ea)) return true;
+    if ((o.nrW > 0 || dist < 260) && f.cd.e <= 0 && dist < RE + E_R - 10 && castSkill(f, 'e', ea)) return true;
+    if (o.nrW > 0){ const a = ea + Math.PI; if (dist < 220 && f.dashCd <= 0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(a) * 620; f.vy = Math.sin(a) * 620; } else { f.vx = Math.cos(a) * f.spd; f.vy = Math.sin(a) * f.spd; } return true; }
+    return false;
+  }
   function style(f, o){ return f.nrR > 0 ? {range: 50, strafe: 30} : {range: 300, strafe: 100}; }
   const hazards = f => toads.filter(o => o.f.team !== f.team && !o.hit && o.t < E_DELAY + 0.05).map(o => ({ref: o, x: o.x, y: o.y, r: E_R + f.r * 0.5 + 10, rating: 2}));   // toad about to drop
-  return {clones, hazards, q, w, e, r, slam, afterHit, shield, locked, update, depth, ground, top, reset, bot, style, ownsBullet, KS};
+  return {clones, hazards, q, w, e, r, slam, afterHit, shield, locked, update, depth, ground, top, reset, bot, hard, style, ownsBullet, KS};
 })();
 
 JW_T = JW.target;
@@ -5958,11 +6011,51 @@ const DJ = (() => {
     if (d < 380 && f.cd.w <= 0 && castSkill(f, 'w', ea)) return;
     if (d < 120 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
   }
+  // Hard bot vs another Denji: dodge his ult and Chainsaw Spin, never try to dodge Feral (trade it back), drink my own pools, contest his heal while he is not in Feral
+  function hard(f, o, d, ea, dt){
+    if (f.hp <= 0 || f.stun > 0 || f.root > 0 || f.chan || f.lunge || f.djW || f.djSlam > 0) return false;
+    if (o.id !== 'denji' || o.hp <= 0) return false;
+    const cx = W / 2 - f.x, cy = H / 2 - f.y, cl = Math.hypot(cx, cy) || 1;
+    const run = (a, dashIt) => {
+      if (dashIt && f.dashCd <= 0 && f.dashT <= 0){ f.dashT = 0.15; f.dashCd = 1.2; f.vx = Math.cos(a) * 620; f.vy = Math.sin(a) * 620; }
+      else { f.vx = Math.cos(a) * f.spd; f.vy = Math.sin(a) * f.spd; } };
+    for (const s of shots){                                                          // his ult shot: sidestep it (one roll per shot)
+      if (s.f !== o || s.dead || s.seen) continue;
+      const bx = f.x - s.x, by = f.y - s.y, bd = Math.hypot(bx, by) || 1;
+      if (bd < 520 && (s.vx * bx + s.vy * by) / R_SPD / bd > 0.8){
+        s.seen = true;
+        if (Math.random() < dodgeP(f, 2)){ const side = (s.vx * by - s.vy * bx) >= 0 ? 1 : -1; run(Math.atan2(s.vy, s.vx) + side * Math.PI / 2, true); return true; } }
+    }
+    if (o.djQ > 0){                                                                  // his Chainsaw Spin: step out (one roll per spin)
+      if (!f.djSpinSeen){ f.djSpinSeen = true; f.djSpinOk = Math.random() < dodgeP(f, 2); }
+      if (f.djSpinOk && d < o.r + f.r + 140){
+        const out = ea + Math.PI, ax = Math.cos(out) + cx / cl * 0.5, ay = Math.sin(out) + cy / cl * 0.5; run(Math.atan2(ay, ax), true); return true; }
+    } else f.djSpinSeen = false;
+    const feralEnded = f.djOW && !o.djW; f.djOW = !!o.djW;
+    if (feralEnded && f.cd.w <= 0 && d < 420 && castSkill(f, 'w', ea)) return true;   // his Feral just ended: mine starts now, so I heal alone for longer
+    if (o.djW){                                                                      // his Feral cannot be dodged: stand and trade, Feral of my own only once his is over
+      if (f.cd.e <= 0 && !f.djE && castSkill(f, 'e', ea)) return true;
+      f.aim = ea;
+      if (d < MELEE_R && f.atkCd <= 0) doAuto(f);
+      if (d >= MELEE_R - 10){ f.vx = Math.cos(ea) * f.spd; f.vy = Math.sin(ea) * f.spd; } else f.vx = f.vy = 0;
+      return true;
+    }
+    if (f.hp < f.max - 1){                                                           // not in Feral: drink my own blood pools
+      let best = null, bd = 1e9;
+      for (const p of pools){ if (p.own !== f || p.wait) continue; const pd = Math.hypot(p.x - f.x, p.y - f.y); if (pd < bd){ bd = pd; best = p; } }
+      if (best && bd < 260){ const a = Math.atan2(best.y - f.y, best.x - f.x); f.vx = Math.cos(a) * f.spd; f.vy = Math.sin(a) * f.spd; return false; }
+    }
+    if (o.djE && o.djE.k === 'move' && d < 420){                                      // he popped his shield: stall until it runs out, no trading
+      const out = ea + Math.PI, ax = Math.cos(out) + cx / cl * 0.5, ay = Math.sin(out) + cy / cl * 0.5; run(Math.atan2(ay, ax), d < 160); return true;
+    }
+    if (!f.djE && f.cd.e <= 0 && d < 300 && castSkill(f, 'e', ea)) return true;      // shield up before we trade
+    return false;
+  }
   function reset(){
     pools.length = shots.length = puffs.length = 0;
     for (const f of [player, enemy]){ f.djQ = 0; f.djQt = 0; f.djQn = 0; f.djW = null; f.djPre = 0; f.djSlam = 0; f.djMark = 0; f.djE = null; f.djBleed = null; f.djFear = 0; f.djSpd = 1; if (f.id === 'denji') f.wpT = 0; }
   }
-  return {update, pose, depth, ground, top, hud, icon, bot, style, reset, bleed, endQ, dealMul, takeMul, q, w, e, r, recast, isCS};
+  return {update, pose, depth, ground, top, hud, icon, bot, style, hard, reset, bleed, endQ, dealMul, takeMul, q, w, e, r, recast, isCS};
 })();
 
 // ---------- REZE: Fuse (passive), Q launch, W shockwave, E finger bomb, R point blank ----------
@@ -6016,7 +6109,7 @@ const RZ = (() => {
     if (!tg) return;
     f.aim = ang(f, tg);
     f.rzN = (f.rzN || 0) + 1;
-    const head = f.rzN % 5 === 0;
+    const head = f.rzN % 5 === 0; if (head) f.rzHeadJ = true;
     if (f.rzEW > 0 && f.cd.e > 0){ f.cd.e = 0; f.rzEW = 0; say(f, 0.7, 'E READY'); }   // an auto right after E: E is back
     shoot(f, tg, head ? 'head' : 'aa');
   }
@@ -6064,7 +6157,7 @@ const RZ = (() => {
   function e(f){
     const tg = live(foe(f)); if (!tg) return;
     f.aim = ang(f, tg);
-    f.atkCd = 0;                                    // E resets the auto cooldown
+    f.atkCd = Math.min(f.atkCd, 0.5);               // E cuts the auto cooldown down to 0.5s
     f.rzEW = E_WIN;
     shoot(f, tg, 'e');
   }
@@ -6417,7 +6510,7 @@ const PW = (() => {
     else { for (let i = -1; i <= 1; i++){ ctx2.strokeStyle = '#ff6a7a'; ctx2.lineWidth = 3; const yo = 6 * Math.sin(T2 * 3 + i); ctx2.beginPath(); ctx2.moveTo(cx + i * 12, cy - 16 + yo); ctx2.lineTo(cx + i * 12, cy + 6 + yo); ctx2.stroke(); ctx2.fillStyle = '#ff6a7a'; ctx2.beginPath(); ctx2.moveTo(cx + i * 12 - 4, cy + 6 + yo); ctx2.lineTo(cx + i * 12, cy + 14 + yo); ctx2.lineTo(cx + i * 12 + 4, cy + 6 + yo); ctx2.fill(); } }
   }
   // ---------------- bot ----------------
-  function style(f, o){ return {range: 55, strafe: 60}; }
+  function style(f, o){ return (f.pwR || f.pwMend) ? {range: 420, strafe: 130} : {range: 55, strafe: 60}; }   // Mend and the blood rain: run away while they work, never stand and trade
   function bot(f, o, d, ea){
     if (f.chan || f.lunge) return;
     if (f.pwR){
@@ -6427,7 +6520,7 @@ const PW = (() => {
     if (f.ult >= 100 && d < 420 && (o.stun > 0 || o.knockT > 0 || o.slowT > 0 || d < 260) && castSkill(f, 'r', ea)) return;   // spears stab after 0.7s: cast when he is locked down or close
     if (f.pwMend) return;
     if (o.knockT > 0 && d < Q_L - 40 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;                                          // Hammer knock-up > Spikes: guaranteed hit
-    if (f.hp < 45 && d > 170 && f.cd.w <= 0 && castSkill(f, 'w', ea)) return;
+    if (((f.hp < 45 && d > 170) || (f.hp < f.max - 25 && d > 260)) && f.cd.w <= 0 && castSkill(f, 'w', ea)) return;   // Mend whenever there is space to keep it going
     if (d < Q_L - 40 && f.cd.q <= 0 && castSkill(f, 'q', ea)) return;
     if (d < E_HOP + E_IMP + E_R - 15 && chg(f, 'e') > 0 && castSkill(f, 'e', ea)) return;
   }
@@ -6564,7 +6657,7 @@ const LV = (() => {
       const dx = tg.x - f.x, dy = tg.y - f.y, al = dx * c + dy * s, pe = Math.abs(-dx * s + dy * c);
       if (al > 0 && al < R_RANGE + tg.r && pe < tg.r + R_SKIP && !losBlocked(f, tg) && (!an || al < an.d + tg.r)) tgt = tg;
     }
-    if (!tgt){ an = an || anchor(f, a, R_RANGE, true); if (!an || an.d < 60){ f.cd.r = 0; say(f, 0.7, 'NO TARGET'); return; } }   // the enemy needs a clean aim; props get aim assist
+    if (!tgt){ an = an || anchor(f, a, R_RANGE, true); if (!an || an.d < 60){ f.cd.r = 0; useOdm(f); say(f, 0.7, 'NO TARGET'); return; } }   // the enemy needs a clean aim; props get aim assist
     useOdm(f); f.aim = a; f.aaW = null; f.atkCd = Math.max(f.atkCd, 0.3);
     f.lvR = {tg: tgt, ax: tgt ? tgt.x : an.x - c * (f.r + 8), ay: tgt ? tgt.y : an.y - s * (f.r + 8), a, wind: R_WIND, go: false, t: 0, lost: 0};
     fxs.push({k: 'anchor', x: tgt ? tgt.x : an.x, y: tgt ? tgt.y : an.y, t: 0, dur: 0.5});
