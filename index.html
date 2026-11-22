@@ -8240,19 +8240,22 @@ const MENU = (() => {
   const setV = id => { V.id = id; V.info = 'p'; V.seq = null; V.t0 = performance.now(); V.live = null; };
   const head2 = t => `<div class="hd"><div class="ht">${t}</div></div>`;
   const bbar = right => `<div class="bbar"><button class="back" data-act="back">&lt; BACK</button>${right || ''}</div>`;
-  S.nmode = '1v1';
+  S.nmode = '1v1'; S.nsel = false;
+  const netBlank = () => S.screen === 'pvp' && S.step === 'you' && !S.nsel;
   const nesc = x => String(x).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const netMe = () => NET.roster.findIndex(p => p.id === NET.id);
   const netMate = () => { if (NET.mode !== '2v2') return null; const m = netMe(); return m < 0 ? null : (NET.roster[(m + 2) % 4] || null); };
   const net2 = () => S.screen === 'pvp' && S.step === 'you' && NET.mode === '2v2' && !!NET.ws;
   const netShift = () => net2() ? ';left:290px;right:auto;width:190px;font-size:13px' : '';
+  const netQ = (cx, nm, tag) => `<div class="fg" style="left:${cx - 95}px;--c:#9aa5c0"><div class="fgn">${tag || 'TEAMMATE'} ${nm}<br><b>?</b></div><div class="fgr"></div><div class="qm fgq">?</div></div>`;
   const netPickTop = () => { if (S.screen !== 'pvp' || S.step !== 'you') return ''; const size = NET.mode === '1v1' ? 2 : 4;
     let h = `<div class="pkname setup rm">ROOM ${NET.code} - ${NET.mode === '1v1' ? '1V1' : NET.mode === '2v2' ? '2V2' : 'FFA'} - ${NET.roster.length}/${size}</div>`;
-    if (net2()){ const t = netMate(); h += t && ROSTER[t.char] ? fig(t.char, 575, 'TEAMMATE ' + nesc(t.name).slice(0, 12)) : `<div class="fg" style="left:480px;--c:#9a8ee0"><div class="fgn">TEAMMATE<br><b>WAITING...</b></div><div class="fgr"></div></div>`; }
+    if (netBlank()) h += netQ(NET.mode === '2v2' ? 385 : 480, '', 'YOU');
+    if (net2()){ const t = netMate(); h += t && t.lock && ROSTER[t.char] ? fig(t.char, 575, 'TEAMMATE ' + nesc(t.name).slice(0, 12)) : netQ(575, t ? nesc(t.name).slice(0, 12) : ''); }
     return h; };
   function netLeave(){ const w = NET.ws; if (w){ w.onclose = null; w.onmessage = null; try { w.close(); } catch (e) {} } NET.ws = null; NET.roster = []; NET.host = false; NET.id = -1; NET.status = ''; }
   function netGo(host){
-    if (NET.inGame) return; netLeave();
+    if (NET.inGame) return; netLeave(); S.nsel = false;
     if (!/^wss?:\/\//.test(NETUI.relay)){ NET.status = 'no server address'; return paint(); }
     NETUI.mode = S.nmode; NET.mode = S.nmode;
     if (host){ const L = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let c = ''; for (let i = 0; i < 4; i++) c += L[Math.floor(_rand() * L.length)]; netConnect(true, c); }
@@ -8271,7 +8274,7 @@ const MENU = (() => {
       if (!NET.inGame) netLeave();
       return S.step === 'you' ? stepTo('room') : go('home');
     }
-    if (S.step === 'you'){ netLock(true); stepTo('wait'); }
+    if (S.step === 'you' && S.nsel){ netLock(true); stepTo('wait'); }
   }
   function netPaint(){
     if (S.screen !== 'pvp' || !S.open || NET.inGame) return;
@@ -8281,7 +8284,7 @@ const MENU = (() => {
   }
   { const st = document.createElement('style'); st.textContent = `#menu .nmode{display:flex;gap:6px}#menu .nmode button{flex:1;height:34px;font:inherit;font-size:8px;color:#fff;background:rgba(10,6,48,.9);border:3px solid #3a2c8a;cursor:pointer}#menu .nmode button.on{border-color:#ffe45e;color:#ffe45e}
 #menu .nrow{display:flex;align-items:center;gap:6px;background:rgba(8,6,28,.8);border:2px solid #3a2c8a;padding:7px 8px;margin-bottom:6px;font-size:8px;color:#fff}#menu .nrow b{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#menu .nrow small{font-size:6px;color:#9a8ee0}#menu .nrow em{font-style:normal;font-size:6px;color:#ffb020}#menu .nrow em.ok{color:#4ad07a}#menu .nrow.me{border-color:#5ff0ff}#menu .nrow.dim{opacity:.45}
-#menu .nst{font-size:9px;color:#ffe45e;margin:8px 0}#menu .pkname.rm{font-size:12px}
+#menu.netblank .pnl.pl{visibility:hidden}#menu .nst{font-size:9px;color:#ffe45e;margin:8px 0}#menu .pkname.rm{font-size:12px}
 #menu.net2 > #stg{left:calc(var(--cx,50%) - var(--c,1)*92px)}#menu.net2 #stg canvas.vc{transform:scale(calc(var(--c,1)*.62))}#menu.net2 #stg .pkst{width:180px;left:-90px}
 #menu.scr-pvp .fgr{border:4px solid #ffe45e;background:radial-gradient(ellipse at 50% 40%,#6a3fc0 0,#4a2a96 60%,#2c1766 100%);box-shadow:0 0 0 3px #1a0c3e,0 8px 0 3px #0e0626,0 0 22px rgba(255,228,94,.55)}
 #menu.net2 #stg::before{content:'';position:absolute;z-index:-1;left:calc(var(--c,1)*-78px);top:calc(var(--c,1)*-36px);width:calc(var(--c,1)*156px);height:calc(var(--c,1)*46px);border-radius:50%;border:4px solid #ffe45e;background:radial-gradient(ellipse at 50% 40%,#6a3fc0 0,#4a2a96 60%,#2c1766 100%);box-shadow:0 0 0 3px #1a0c3e,0 8px 0 3px #0e0626,0 0 22px rgba(255,228,94,.55)}`; document.head.appendChild(st); }
@@ -8359,17 +8362,18 @@ const MENU = (() => {
     g.putImageData(im, 0, 0); return cv; };
   const drawLogo = () => { const el = $m.querySelector('canvas.logo'); if (!el) return; if (!LOGO) LOGO = buildLogo(); el.width = LOGO.width; el.height = LOGO.height; el.style.width = LOGO.width * 2 + 'px'; el.style.height = LOGO.height * 2 + 'px'; el.getContext('2d').drawImage(LOGO, 0, 0); };
   const short = i => ROSTER[i].name.toUpperCase().split(' ').slice(-1)[0];
-  const stageHTML = () => { if (!viewing()) return ''; const r = ROSTER[S.screen === 'view' ? V.id : S.you];
+  const stageHTML = () => { if (!viewing() || netBlank()) return ''; const r = ROSTER[S.screen === 'view' ? V.id : S.you];
     return '<div id="stg"><canvas class="vc" id="vc" width="128" height="84"></canvas><div class="st pkst">' + '<span>HP</span>' + bar(r.hp, 170, '#ff6b6b') + '<span>SPD</span>' + bar(r.spd, 240, '#6bd5ff') + '</div></div>'; };
   const pickHTML = (isView) => {
     const id = isView ? V.id : S.you, r = ROSTER[id], c = col(id), d = infoOf(id, V.info);
-    const cards = IDS.map(i => `<div class="gc ${id === i ? 'sel' : ''}" data-pick="${i}" style="--c:${col(i)}">${pc(i)}<div class="cn">${short(i)}</div></div>`).join('');
-    return `${netPickTop()}<div class="pkname" style="--c:${c}${netShift()}">${r.name.toUpperCase()}</div>
+    const blank = netBlank();
+    const cards = IDS.map(i => `<div class="gc ${!blank && id === i ? 'sel' : ''}" data-pick="${i}" style="--c:${col(i)}">${pc(i)}<div class="cn">${short(i)}</div></div>`).join('');
+    return `${netPickTop()}${blank ? '' : `<div class="pkname" style="--c:${c}${netShift()}">${r.name.toUpperCase()}</div>`}
       <div class="pnl pl" style="--c:${c}"><div class="ph">ABILITIES</div>
         <div class="krows">${['p', 'q', 'w', 'e', 'r'].map(k => `<button class="krow ${V.info === k ? 'sel' : ''}" data-info="${k}" data-key="${k}"><em>${k === 'p' ? 'P' : k.toUpperCase()}</em><span>${k === 'p' ? INFO[id].p[0] : SKILLS[id][k].name}</span></button>`).join('')}</div>
         <div class="kdesc"><div class="kt">${d.t}</div><div class="kx">${d.x}</div></div></div>
       <div class="pnl pr"><div class="ph">FIGHTERS</div><div class="grid4">${cards}</div></div>
-      ${bbar(isView ? '' : `<button class="start" data-act="next">SELECT &gt;</button>`)}`;
+      ${bbar(isView ? '' : `<button class="start" data-act="next" ${blank ? 'disabled style="opacity:.4"' : ''}>SELECT &gt;</button>`)}`;
   };
   const roomHTML = () => { const st = NET.status && NET.status !== 'connecting...' ? (NET.status === 'connected' ? 'disconnected' : NET.status) : (NET.ws ? 'connecting...' : '');
     return `${head2('ONLINE')}<div class="roomw"><div class="lobby">
@@ -8384,7 +8388,7 @@ const MENU = (() => {
     let rows = r.map((p, i) => { const mine = i === me, ally = mate && p.id === mate.id;
       return `<div class="nrow${mine ? ' me' : ''}"><b>${nesc(p.name)}</b><small>${mine ? 'YOU' : ally ? 'TEAMMATE' : 'OPPONENT'}</small><em class="${p.lock ? 'ok' : ''}">${p.lock ? 'LOCKED' : 'PICKING'}</em></div>`; }).join('');
     for (let i = r.length; i < size; i++) rows += `<div class="nrow dim"><b>WAITING...</b></div>`;
-    const figs = NET.mode === '2v2' ? fig(S.you, 380, 'YOU') + (mate && ROSTER[mate.char] ? fig(mate.char, 580, 'TEAMMATE') : '') : fig(S.you, 480, 'YOU');
+    const figs = NET.mode === '2v2' ? fig(S.you, 380, 'YOU') + (mate && mate.lock && ROSTER[mate.char] ? fig(mate.char, 580, 'TEAMMATE ' + nesc(mate.name).slice(0, 12)) : netQ(580, mate ? nesc(mate.name).slice(0, 12) : '')) : fig(S.you, 480, 'YOU');
     const title = all && r.length === size ? 'STARTING...' : NET.mode === 'ffa' && all ? (NET.host ? 'PRESS START' : 'WAITING FOR HOST') : 'WAITING FOR PLAYERS';
     const maps = NET.host ? `<div class="ph ph2">MAP</div><div class="mapl">${MAPS_UI.map(k => `<button data-map="${k}" class="${S.map === k ? 'on' : ''}"><b>${MAP_NAME[k]}</b><small>${MAP_SUB[k]}</small></button>`).join('')}</div>` : `<div class="nst">HOST PICKS THE MAP</div>`;
     const go2 = NET.host && NET.mode === 'ffa' ? `<button class="start" data-act="netstart" ${all ? '' : 'disabled style="opacity:.4"'}>START &gt;</button>` : '';
@@ -8455,7 +8459,7 @@ const MENU = (() => {
   let lastScr = '';
   function paint(){
     const sk = S.screen + ':' + (S.step || '') + ':' + S.open; if (sk !== lastScr){ if (lastScr) AUD.stopVoice('menu'); lastScr = sk; }   // leaving a screen (or starting the match) cuts the pick / ability line
-    $m.className = 'scr-' + S.screen + ' step-' + (S.step || 'x') + (viewing() ? ' pk' : '') + (MODES[S.screen] && S.step === 'opts' ? ' st' : '') + (net2() ? ' net2' : ''); $m.innerHTML = '<div id="mbox">' + SCREENS[S.screen]() + '</div>' + stageHTML(); drawLogo(); $m.style.display = S.open ? 'block' : 'none'; AUD.play(!S.open ? 'battle' : viewing() ? 'select' : 'lobby'); $b.style.display = !S.open && !locked() ? 'block' : 'none'; tick();
+    $m.className = 'scr-' + S.screen + ' step-' + (S.step || 'x') + (viewing() ? ' pk' : '') + (MODES[S.screen] && S.step === 'opts' ? ' st' : '') + (net2() ? ' net2' : '') + (netBlank() ? ' netblank' : ''); $m.innerHTML = '<div id="mbox">' + SCREENS[S.screen]() + '</div>' + stageHTML(); drawLogo(); $m.style.display = S.open ? 'block' : 'none'; AUD.play(!S.open ? 'battle' : viewing() ? 'select' : 'lobby'); $b.style.display = !S.open && !locked() ? 'block' : 'none'; tick();
   }
   let vraf = 0;
   const OX = 42, OY = 12;                                                                // the sprite sits at (OX, OY) on the 128x84 viewer canvas; room around him for effects
@@ -8598,7 +8602,7 @@ const MENU = (() => {
     if (t.dataset.bind){ S.msg = ''; S.bind = S.bind === t.dataset.bind ? null : t.dataset.bind; return paint(); }
     if (t.dataset.nmode){ S.nmode = t.dataset.nmode; return paint(); }
     if (t.dataset.go) return go(t.dataset.go);
-    if (t.dataset.pick){ const id = t.dataset.pick; AUD.voice(id); if (S.step === 'opp') S.opp = id; else S.you = id; if (id !== 'random') setV(id); save(); if (S.screen === 'pvp') netSendPick(); return paint(); }
+    if (t.dataset.pick){ const id = t.dataset.pick; AUD.voice(id); if (S.step === 'opp') S.opp = id; else S.you = id; if (id !== 'random') setV(id); save(); if (S.screen === 'pvp'){ S.nsel = true; netSendPick(); } return paint(); }
     if (t.dataset.opp){ S.opp = t.dataset.opp; AUD.voice(t.dataset.opp); save(); return paint(); }
     if (t.dataset.slot){ S.slot = t.dataset.slot; return paint(); }
     if (t.dataset.map){ S.map = t.dataset.map; save(); return paint(); }
